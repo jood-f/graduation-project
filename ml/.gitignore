@@ -1,0 +1,12 @@
+# Node modules
+frontend/node_modules/
+
+# Python venv
+ml/.venv/
+
+# Vite build
+frontend/dist/
+
+# Python cache
+**/__pycache__/
+*.pyc
