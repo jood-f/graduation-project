@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Plane, Clock, CheckCircle, XCircle, Eye, ThumbsUp, Upload, Play, Plus } from 'lucide-react';
-import { mockSites } from '@/data/mockData';
+import { useSites } from '@/hooks/useSites';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMissions, useApproveMission, useUpdateMissionStatus, type Mission } from '@/hooks/useMissions';
@@ -57,6 +57,7 @@ export default function Missions() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const { data: missions, isLoading } = useMissions();
+  const { data: sites } = useSites();
   const approveMutation = useApproveMission();
   const updateStatusMutation = useUpdateMissionStatus();
 
@@ -71,10 +72,10 @@ export default function Missions() {
     if (!missions) return [];
     return missions.filter(mission => {
       const matchesStatus = statusFilter === 'all' || mission.status === statusFilter;
-      const matchesSite = siteFilter === 'all' || mission.site_name === mockSites.find(s => s.id === siteFilter)?.name;
+      const matchesSite = siteFilter === 'all' || mission.site_name === sites?.find(s => s.id === siteFilter)?.name;
       return matchesStatus && matchesSite;
     });
-  }, [missions, statusFilter, siteFilter]);
+  }, [missions, statusFilter, siteFilter, sites]);
 
   const handleApprove = (mission: Mission) => {
     approveMutation.mutate(mission.id);
@@ -121,7 +122,7 @@ export default function Missions() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Sites</SelectItem>
-                  {mockSites.map(site => (
+                  {sites?.map(site => (
                     <SelectItem key={site.id} value={site.id}>
                       {site.name}
                     </SelectItem>

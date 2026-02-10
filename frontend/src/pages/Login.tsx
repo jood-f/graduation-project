@@ -22,6 +22,9 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function Login() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetForm, setShowResetForm] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -40,7 +43,12 @@ export default function Login() {
       });
 
       if (error) {
-        toast.error(error.message);
+        // Handle email not confirmed error
+        if (error.message.toLowerCase().includes('email not confirmed')) {
+          toast.error('Please confirm your email before logging in. Check your inbox for the confirmation link.');
+        } else {
+          toast.error(error.message);
+        }
         return;
       }
 
@@ -53,8 +61,64 @@ export default function Login() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetEmail) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    
+    setIsResetting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      
+      toast.success('Password reset link sent! Check your email.');
+      setShowResetForm(false);
+      setResetEmail('');
+    } catch (error) {
+      toast.error('An unexpected error occurred');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {showResetForm ? (
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center space-y-4">
+            <div className="flex justify-center">
+              <img src={SolarSenseLogo} alt="SolarSense" className="h-16 w-auto" />
+            </div>
+            <CardTitle className="text-2xl">Reset Password</CardTitle>
+            <CardDescription>Enter your email to receive a password reset link</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleResetPassword} className="w-full" disabled={isResetting}>
+              {isResetting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Send Reset Link
+            </Button>
+            <Button variant="ghost" onClick={() => setShowResetForm(false)} className="w-full">
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
@@ -89,7 +153,16 @@ export default function Login() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <div className="flex justify-between items-center">
+                      <FormLabel>Password</FormLabel>
+                      <button
+                        type="button"
+                        onClick={() => setShowResetForm(true)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
                     <FormControl>
                       <Input
                         type="password"
@@ -118,6 +191,7 @@ export default function Login() {
           </p>
         </CardFooter>
       </Card>
+      )}
     </div>
   );
 }

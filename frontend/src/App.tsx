@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { RoleBasedRoute } from "@/components/auth/RoleBasedRoute";
 import Overview from "./pages/Overview";
 import Panels from "./pages/Panels";
 import Anomalies from "./pages/Anomalies";
@@ -14,6 +15,7 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,11 +31,33 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              {/* All authenticated users can access Overview */}
               <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
-              <Route path="/panels" element={<ProtectedRoute><Panels /></ProtectedRoute>} />
-              <Route path="/anomalies" element={<ProtectedRoute><Anomalies /></ProtectedRoute>} />
-              <Route path="/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
-              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              {/* Panels & Anomalies: Admin and Operator only */}
+              <Route path="/panels" element={
+                <RoleBasedRoute allowedRoles={['admin', 'operator']}>
+                  <Panels />
+                </RoleBasedRoute>
+              } />
+              <Route path="/anomalies" element={
+                <RoleBasedRoute allowedRoles={['admin', 'operator']}>
+                  <Anomalies />
+                </RoleBasedRoute>
+              } />
+              {/* Missions: All roles can view, but with different permissions */}
+              <Route path="/missions" element={
+                <RoleBasedRoute allowedRoles={['admin', 'operator', 'drone_team']}>
+                  <Missions />
+                </RoleBasedRoute>
+              } />
+              {/* Admin: Admin only */}
+              <Route path="/admin" element={
+                <RoleBasedRoute allowedRoles={['admin']}>
+                  <Admin />
+                </RoleBasedRoute>
+              } />
+              {/* Profile: All authenticated users */}
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -38,7 +38,16 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null
   }
 
   // 2) role via RPC (احترافي)
-  let role: UserRole = (profile?.role as UserRole) || "operator";
+  // Normalize role to expected format: lowercase with underscores
+  const normalizeRole = (r: string): UserRole => {
+    const normalized = r.toLowerCase().replace(/\s+/g, '_');
+    if (['admin', 'operator', 'drone_team'].includes(normalized)) {
+      return normalized as UserRole;
+    }
+    return 'operator';
+  };
+  
+  let role: UserRole = normalizeRole((profile?.role as string) || "operator");
   try {
     const { data: roleData, error: roleError } = await (supabase as any).rpc("get_user_role", {
       user_id: supabaseUser.id, // ✅ لازم الاسم نفسه في SQL
@@ -47,7 +56,7 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null
     if (roleError) {
       console.error("Error fetching role (RPC):", roleError);
     } else if (roleData) {
-      role = roleData as UserRole;
+      role = normalizeRole(roleData as string);
     }
   } catch (e) {
     console.error("RPC exception:", e);

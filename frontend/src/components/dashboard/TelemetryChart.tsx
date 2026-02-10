@@ -1,17 +1,63 @@
 import { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { mockTelemetry } from '@/data/mockData';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useLatestTelemetry } from '@/hooks/useTelemetry';
 
 export function TelemetryChart() {
+  const { data: telemetry, isLoading, error } = useLatestTelemetry(12);
+
   const chartData = useMemo(() => {
-    const telemetry = mockTelemetry['panel-001'] || [];
-    return telemetry.slice(-12).map(t => ({
-      time: new Date(t.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      power: Math.round(t.acPower),
-      temperature: Math.round(t.temperature),
+    if (!telemetry || telemetry.length === 0) return [];
+    
+    // Group by hour and average the power
+    const hourlyData: { [key: string]: { total: number; count: number } } = {};
+    
+    telemetry.forEach(t => {
+      const hour = new Date(t.timestamp).toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      if (!hourlyData[hour]) {
+        hourlyData[hour] = { total: 0, count: 0 };
+      }
+      hourlyData[hour].total += t.power || 0;
+      hourlyData[hour].count += 1;
+    });
+
+    return Object.entries(hourlyData).map(([time, data]) => ({
+      time,
+      power: Math.round(data.total / data.count),
     }));
-  }, []);
+  }, [telemetry]);
+
+  if (isLoading) {
+    return (
+      <Card className="col-span-2">
+        <CardHeader>
+          <CardTitle>Power Output (Last 12 Hours)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[300px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error || chartData.length === 0) {
+    return (
+      <Card className="col-span-2">
+        <CardHeader>
+          <CardTitle>Power Output (Last 12 Hours)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+            {error ? 'Error loading telemetry data' : 'No telemetry data available'}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="col-span-2">

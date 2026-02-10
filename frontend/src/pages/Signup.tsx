@@ -31,6 +31,8 @@ type SignupFormValues = z.infer<typeof signupSchema>;
 export default function Signup() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState('');
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -63,8 +65,9 @@ export default function Signup() {
         return;
       }
 
-      toast.success('Account created successfully!');
-      navigate('/');
+      setSubmittedEmail(values.email);
+      setShowConfirmation(true);
+      toast.success('Please check your email to confirm your account!');
     } catch (error) {
       toast.error('An unexpected error occurred');
     } finally {
@@ -74,6 +77,27 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {showConfirmation ? (
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center space-y-4">
+            <div className="flex justify-center">
+              <img src={SolarSenseLogo} alt="SolarSense" className="h-16 w-auto" />
+            </div>
+            <CardTitle className="text-2xl">Check Your Email</CardTitle>
+            <CardDescription>
+              We've sent a confirmation link to <strong>{submittedEmail}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              Please click the link in the email to verify your account before logging in.
+            </p>
+            <Button variant="outline" onClick={() => navigate('/login')} className="w-full">
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
@@ -193,6 +217,7 @@ export default function Signup() {
           </p>
         </CardFooter>
       </Card>
+      )}
     </div>
   );
 }

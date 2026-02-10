@@ -19,8 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Search, Filter, Eye } from 'lucide-react';
-import { mockPanels, mockSites } from '@/data/mockData';
+import { usePanels } from '@/hooks/usePanels';
+import { useSites } from '@/hooks/useSites';
 import type { PanelStatus } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -35,16 +37,20 @@ export default function Panels() {
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const { data: panels, isLoading: panelsLoading } = usePanels();
+  const { data: sites, isLoading: sitesLoading } = useSites();
+
   const filteredPanels = useMemo(() => {
-    return mockPanels.filter(panel => {
+    if (!panels) return [];
+    return panels.filter(panel => {
       const matchesSearch = 
-        panel.label.toLowerCase().includes(search.toLowerCase()) ||
-        panel.serialNumber.toLowerCase().includes(search.toLowerCase());
-      const matchesSite = siteFilter === 'all' || panel.siteId === siteFilter;
+        (panel.label || '').toLowerCase().includes(search.toLowerCase()) ||
+        (panel.serial_number || '').toLowerCase().includes(search.toLowerCase());
+      const matchesSite = siteFilter === 'all' || panel.site_id === siteFilter;
       const matchesStatus = statusFilter === 'all' || panel.status === statusFilter;
       return matchesSearch && matchesSite && matchesStatus;
     });
-  }, [search, siteFilter, statusFilter]);
+  }, [panels, search, siteFilter, statusFilter]);
 
   return (
     <MainLayout title="Panels">
@@ -69,7 +75,7 @@ export default function Panels() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Sites</SelectItem>
-                  {mockSites.map(site => (
+                  {sites?.map(site => (
                     <SelectItem key={site.id} value={site.id}>
                       {site.name}
                     </SelectItem>
@@ -91,13 +97,19 @@ export default function Panels() {
           </div>
         </CardHeader>
         <CardContent>
+          {panelsLoading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Label</TableHead>
                 <TableHead>Serial Number</TableHead>
                 <TableHead>Site</TableHead>
-                <TableHead>Installed</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -105,10 +117,9 @@ export default function Panels() {
             <TableBody>
               {filteredPanels.map(panel => (
                 <TableRow key={panel.id}>
-                  <TableCell className="font-medium">{panel.label}</TableCell>
-                  <TableCell className="text-muted-foreground">{panel.serialNumber}</TableCell>
-                  <TableCell>{panel.siteName}</TableCell>
-                  <TableCell>{new Date(panel.installedAt).toLocaleDateString()}</TableCell>
+                  <TableCell className="font-medium">{panel.label || 'N/A'}</TableCell>
+                  <TableCell className="text-muted-foreground">{panel.serial_number || 'N/A'}</TableCell>
+                  <TableCell>{panel.site_name}</TableCell>
                   <TableCell>
                     <Badge className={cn(statusStyles[panel.status])}>
                       {panel.status}
@@ -123,7 +134,8 @@ export default function Panels() {
               ))}
             </TableBody>
           </Table>
-          {filteredPanels.length === 0 && (
+          )}
+          {!panelsLoading && filteredPanels.length === 0 && (
             <p className="py-8 text-center text-muted-foreground">
               No panels found matching your criteria
             </p>
