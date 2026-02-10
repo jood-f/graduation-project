@@ -1,68 +1,129 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
+@layer base {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    --background: 120 15% 97%;
+    --foreground: 152 60% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 152 60% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 152 60% 12%;
+
+    --primary: 152 60% 22%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 120 20% 94%;
+    --secondary-foreground: 152 60% 12%;
+
+    --muted: 120 15% 93%;
+    --muted-foreground: 150 15% 40%;
+
+    --accent: 43 96% 56%;
+    --accent-foreground: 152 60% 12%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 140 20% 88%;
+    --input: 140 20% 88%;
+    --ring: 152 60% 22%;
+
+    --radius: 0.625rem;
+
+    --success: 152 60% 28%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 43 96% 56%;
+    --warning-foreground: 152 60% 12%;
+    
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    --sidebar-background: 152 60% 15%;
+    --sidebar-foreground: 120 20% 96%;
+    --sidebar-primary: 43 96% 56%;
+    --sidebar-primary-foreground: 152 60% 12%;
+    --sidebar-accent: 152 55% 20%;
+    --sidebar-accent-foreground: 120 20% 96%;
+    --sidebar-border: 152 50% 20%;
+    --sidebar-ring: 43 96% 56%;
+
+    --chart-1: 152 60% 28%;
+    --chart-2: 43 96% 56%;
+    --chart-3: 199 89% 48%;
+    --chart-4: 152 40% 45%;
+    --chart-5: 0 84% 60%;
   }
-  a:hover {
-    color: #747bff;
+
+  .dark {
+    --background: 152 50% 6%;
+    --foreground: 120 20% 96%;
+
+    --card: 152 50% 10%;
+    --card-foreground: 120 20% 96%;
+
+    --popover: 152 50% 10%;
+    --popover-foreground: 120 20% 96%;
+
+    --primary: 152 55% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 152 45% 15%;
+    --secondary-foreground: 120 20% 96%;
+
+    --muted: 152 45% 15%;
+    --muted-foreground: 140 15% 60%;
+
+    --accent: 43 96% 56%;
+    --accent-foreground: 152 60% 12%;
+
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 120 20% 96%;
+
+    --border: 152 45% 15%;
+    --input: 152 45% 15%;
+    --ring: 152 55% 35%;
+
+    --success: 152 55% 35%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 43 96% 56%;
+    --warning-foreground: 152 60% 12%;
+    
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    --sidebar-background: 152 55% 8%;
+    --sidebar-foreground: 120 20% 96%;
+    --sidebar-primary: 43 96% 56%;
+    --sidebar-primary-foreground: 152 60% 12%;
+    --sidebar-accent: 152 50% 14%;
+    --sidebar-accent-foreground: 120 20% 96%;
+    --sidebar-border: 152 50% 14%;
+    --sidebar-ring: 43 96% 56%;
+
+    --chart-1: 152 55% 40%;
+    --chart-2: 43 96% 56%;
+    --chart-3: 199 89% 48%;
+    --chart-4: 152 40% 50%;
+    --chart-5: 0 84% 60%;
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
   }
 }
