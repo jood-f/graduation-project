@@ -1,0 +1,24 @@
+# Python virtual environment
+yolov8_env/
+
+# OS/system files
+.DS_Store
+Thumbs.db
+
+# VSCode or other editor settings
+.vscode/
+
+# Logs
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Any other project-level temporary files
+*.tmp

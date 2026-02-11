@@ -1,0 +1,10 @@
+path: C:\Users\raghad\OneDrive\Desktop\Senior_Project\graduation-project\CV\DET_ROOT
+train: images/train
+val: images/val
+test: images/test
+names:
+- Clean
+- Dusty
+- Electrical-damage
+- Physical-Damage
+- Snow-Covered

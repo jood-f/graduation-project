@@ -1,0 +1,9 @@
+ultralytics
+opencv-contrib-python
+numpy
+matplotlib
+albumentations
+scikit-learn
+tqdm
+pyyaml
+ka

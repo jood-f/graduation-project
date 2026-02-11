@@ -1,0 +1,10 @@
+path: C:\Users\raghad\OneDrive\Desktop\Senior_Project\graduation-project\CV\YOLO_RESULTS\run_20260210_194054\solar_det
+train: images/train
+val: images/val
+test: images/test
+names:
+- Clean
+- Dusty
+- Electrical-damage
+- Physical-Damage
+- Snow-Covered
