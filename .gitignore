@@ -17,13 +17,8 @@ ENV/
 ml/telemetry_power_results.png
 ml/*.png
 
-# Node
-node_modules/
-dist/
-.DS_Store
+# YOLO & CV
+*.pt
+CV/YOLO_RESULTS/
+runs/detect/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
