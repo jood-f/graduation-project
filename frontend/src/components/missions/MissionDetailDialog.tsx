@@ -85,13 +85,28 @@ export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDeta
               ) : images && images.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4">
                   {images.map((img) => (
-                    <img
-                      key={img.id}
-                      src={img.url}
-                      alt="Drone capture"
-                      className="rounded-lg object-cover h-40 w-full cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => window.open(img.url, '_blank')}
-                    />
+                    <div key={img.id} className="relative">
+                      <img
+                        src={img.url}
+                        alt="Drone capture"
+                        className="rounded-lg object-cover h-40 w-full cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => window.open(img.url, '_blank')}
+                      />
+                      {mission.status !== 'COMPLETED' && (
+                        <button
+                          className="absolute top-2 right-2 bg-white/80 rounded p-1 text-danger hover:opacity-90"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            // lazy-load delete mutation to avoid cyclic imports
+                            const { useDeleteMissionImage } = await import('@/hooks/useMissions');
+                            const deleteMut = useDeleteMissionImage();
+                            deleteMut.mutate({ imageId: img.id, missionId: mission.id });
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (

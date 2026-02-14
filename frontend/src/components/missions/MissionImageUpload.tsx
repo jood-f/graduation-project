@@ -17,8 +17,7 @@ interface MissionImageUploadProps {
 export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange }: MissionImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const isGeminiConfigured = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
-  const [enableAI, setEnableAI] = useState(isGeminiConfigured);
+  const [enableAI, setEnableAI] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const uploadMutation = useUploadMissionImage();
 
@@ -109,7 +108,6 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
               id="ai-analysis"
               checked={enableAI}
               onCheckedChange={setEnableAI}
-              disabled={!isGeminiConfigured}
             />
             <div className="flex-1">
               <Label htmlFor="ai-analysis" className="flex items-center gap-2 cursor-pointer">
@@ -117,13 +115,8 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
                 <span className="font-medium">AI Defect Detection</span>
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
-                Automatically detect cracks, hotspots, dust, and other defects using Gemini 1.5 Pro
+                Automatically detect defects using YOLOv8 computer vision model
               </p>
-              {!isGeminiConfigured && (
-                <p className="text-xs text-amber-600 mt-1">
-                  AI disabled: set VITE_GEMINI_API_KEY to enable analysis
-                </p>
-              )}
             </div>
           </div>
         </div>

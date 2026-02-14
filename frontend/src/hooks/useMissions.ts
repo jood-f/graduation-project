@@ -3,8 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import { detectDefects, preprocessImage } from '@/lib/gemini';
-import { useCreateInspectionResults } from '@/hooks/useAI';
+import { analyzeImage } from '@/services/cvService';
 
 export interface Mission {
   id: string;
@@ -61,7 +60,7 @@ export function useMissionImages(missionId: string | null) {
       const imagesWithUrls = await Promise.all(
         (data as MissionImage[]).map(async (img) => {
           const { data: urlData } = supabase.storage
-            .from('mission-images')
+            .from('mission_images')
             .getPublicUrl(img.storage_path);
           return { ...img, url: urlData.publicUrl };
         })
@@ -128,7 +127,22 @@ export function useUpdateMissionStatus() {
 export function useUploadMissionImage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const createInspectionResults = useCreateInspectionResults();
+
+  // Helper to get image dimensions
+  const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => {
+        reject(new Error('Failed to load image'));
+        URL.revokeObjectURL(img.src);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  };
 
   return useMutation({
     mutationFn: async ({ 
@@ -147,9 +161,12 @@ export function useUploadMissionImage() {
       const fileExt = file.name.split('.').pop();
       const fileName = `${missionId}/${uuidv4()}.${fileExt}`;
 
+      // Get image dimensions
+      const { width, height } = await getImageDimensions(file);
+
       // Upload to storage
       const { error: uploadError } = await supabase.storage
-        .from('mission-images')
+        .from('mission_images')
         .upload(fileName, file);
 
       if (uploadError) {
@@ -162,8 +179,12 @@ export function useUploadMissionImage() {
         .from('mission_images')
         .insert({
           mission_id: missionId,
+          // Write both fields for backward compatibility with existing DB schema
           storage_path: fileName,
+          storage_key: fileName,
           content_type: file.type,
+          width,
+          height,
           uploaded_by_user_id: user.id,
         })
         .select()
@@ -174,75 +195,37 @@ export function useUploadMissionImage() {
         throw new Error(`Database record failed: ${dbError.message}`);
       }
 
-      // AI Pipeline 2: Vision-Based Defect Detection
+      // AI Pipeline: YOLOv8 Vision-Based Defect Detection via Backend API
       if (enableAI && imageData) {
-        console.log('[Upload] Starting AI analysis...');
+        console.log('[Upload] Starting YOLOv8 AI analysis...');
         try {
-          // Check if Gemini API key is configured
-          if (!import.meta.env.VITE_GEMINI_API_KEY) {
-            console.warn('[Upload] Gemini API key not configured, skipping AI analysis');
-            toast.info('Image uploaded (AI disabled - missing API key)');
+          // Call the backend API to analyze the image
+          const analysis = await analyzeImage(imageData.id);
+          console.log('[Upload] AI analysis complete:', analysis);
+
+          // Show results
+          const defectCount = analysis.total_detections;
+          const failedDetections = analysis.detections.filter(d => d.status === 'FAIL');
+          const criticalDefects = failedDetections.filter(d => d.confidence > 0.8).length;
+
+          if (criticalDefects > 0) {
+            toast.warning(`AI detected ${criticalDefects} high-confidence defect(s)`, {
+              description: `Found: ${failedDetections.map(d => d.class_name).join(', ')}`,
+            });
+          } else if (failedDetections.length > 0) {
+            toast.info(`AI detected ${failedDetections.length} potential defect(s)`, {
+              description: 'Review the inspection results for details',
+            });
+          } else if (defectCount > 0) {
+            toast.success('Image uploaded - Panel appears clean');
           } else {
-            try {
-              console.log('[Upload] Preprocessing image...');
-              // Preprocess image (resize to 1024px, base64 encode)
-              const imageBase64 = await preprocessImage(file);
-              console.log('[Upload] Image preprocessed, calling Gemini...');
-              
-              // Determine image type based on filename or metadata
-              const imageType: 'RGB' | 'THERMAL' = 
-                file.name.toLowerCase().includes('thermal') ? 'THERMAL' : 'RGB';
-
-              // Detect defects using Gemini 1.5 Pro
-              const analysis = await detectDefects(imageBase64, imageType);
-              console.log('[Upload] AI analysis complete:', analysis);
-
-              // Store inspection results if defects found
-              if (analysis.defects.length > 0) {
-                console.log(`[Upload] Saving ${analysis.defects.length} defects to database...`);
-                const inspectionResults = analysis.defects.map(defect => ({
-                  mission_id: missionId,
-                  mission_image_id: imageData.id,
-                  defect_type: defect.type,
-                  confidence: defect.confidence,
-                  bbox_x: defect.bbox.x,
-                  bbox_y: defect.bbox.y,
-                  bbox_width: defect.bbox.width,
-                  bbox_height: defect.bbox.height,
-                  description: defect.description,
-                  overall_condition: analysis.overallCondition,
-                  recommended_action: analysis.recommendedAction,
-                }));
-
-                await createInspectionResults.mutateAsync(inspectionResults);
-                console.log('[Upload] Inspection results saved successfully');
-                
-                // Show defect summary
-                const defectCount = analysis.defects.length;
-                const criticalDefects = analysis.defects.filter(d => d.confidence > 0.8).length;
-                
-                if (criticalDefects > 0) {
-                  toast.warning(`AI detected ${criticalDefects} high-confidence defect(s)`, {
-                    description: `Overall condition: ${analysis.overallCondition}`,
-                  });
-                } else if (defectCount > 0) {
-                  toast.info(`AI detected ${defectCount} potential defect(s)`, {
-                    description: 'Review the inspection results for details',
-                  });
-                }
-              } else {
-                console.log('[Upload] AI found no defects');
-                toast.success('Image uploaded - No defects detected by AI');
-              }
-            } catch (aiError) {
-              console.error('[Upload] AI processing error:', aiError);
-              toast.warning('Image uploaded but AI analysis failed', {
-                description: 'Manual inspection recommended',
-              });
-            }
+            toast.success('Image uploaded - Analysis complete');
           }
-        } catch (error) {
-          console.error('Unexpected AI error:', error);
+        } catch (aiError) {
+          console.error('[Upload] AI processing error:', aiError);
+          toast.warning('Image uploaded but AI analysis failed', {
+            description: 'Backend CV model may not be available',
+          });
         }
       }
 
@@ -259,6 +242,31 @@ export function useUploadMissionImage() {
       console.error('Full upload error details:', error);
       const errorMessage = error?.message || 'Failed to upload image';
       toast.error(errorMessage);
+    },
+  });
+}
+
+export function useDeleteMissionImage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ imageId, missionId }: { imageId: string; missionId: string }) => {
+      const resp = await fetch(`http://127.0.0.1:8000/api/v1/mission-images/${imageId}`, {
+        method: 'DELETE',
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Failed to delete image: ${text}`);
+      }
+      return await resp.json();
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['mission-images', vars.missionId] });
+      toast.success('Image deleted');
+    },
+    onError: (err) => {
+      console.error('Delete image error:', err);
+      toast.error('Failed to delete image');
     },
   });
 }

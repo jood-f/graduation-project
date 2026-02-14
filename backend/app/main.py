@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import engine, Base
 from app.api.sites import router as sites_router
 from app.api.panels import router as panels_router
@@ -8,7 +9,17 @@ from app.api.mission import router as mission_router
 from app.api.mission_images import router as mission_images_router
 from app.api.inspection_results import router as inspection_results_router
 
+
 app = FastAPI(title="SolarSense API")
+
+# Allow CORS for all origins (for development; restrict in production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Or specify your frontend URL(s)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 Base.metadata.create_all(bind=engine)
 

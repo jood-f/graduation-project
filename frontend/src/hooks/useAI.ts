@@ -20,40 +20,16 @@ export interface InspectionResult {
   created_at: string;
 }
 
-export function useInspectionResults(missionId: string | null) {
+export function useInspectionResults(imageId: string | null) {
   return useQuery({
-    queryKey: ['inspection-results', missionId],
+    queryKey: ['inspection-results', imageId],
     queryFn: async () => {
-      if (!missionId) return [];
-
-      // Get mock data
-      const mockResults = mockInspectionResults
-        .filter(result => result.missionId === missionId)
-        .map(result => ({
-          id: result.id,
-          mission_id: result.missionId,
-          mission_image_id: null,
-          defect_type: result.defectType,
-          confidence: result.confidence,
-          bbox_x: result.bbox.x,
-          bbox_y: result.bbox.y,
-          bbox_width: result.bbox.width,
-          bbox_height: result.bbox.height,
-          description: result.notes,
-          overall_condition: getOverallCondition([result]),
-          recommended_action: getRecommendedAction([result]),
-          created_at: result.createdAt,
-        })) as InspectionResult[];
-
-      // Get results from in-memory store
-      const storeResults = useInspectionStore.getResultsByMission(missionId);
-
-      // Combine all results
-      const allResults = [...mockResults, ...storeResults];
-      console.log(`[useAI] Returning ${allResults.length} results for mission ${missionId}`, allResults);
-      return allResults;
+      if (!imageId) return [];
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/mission-images/${imageId}/results`);
+      if (!res.ok) throw new Error('Failed to fetch inspection results');
+      return await res.json();
     },
-    enabled: !!missionId,
+    enabled: !!imageId,
   });
 }
 

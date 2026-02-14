@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle, Flame, Snowflake, Droplet, Wrench, Sparkles
 import { cn } from '@/lib/utils';
 
 interface DefectAnalysisProps {
-  missionId: string;
+  imageId: string;
 }
 
 const defectIcons = {
@@ -32,8 +32,7 @@ const conditionStyles = {
   CRITICAL: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
-export function DefectAnalysis({ missionId }: DefectAnalysisProps) {
-  const { data: results, isLoading } = useInspectionResults(missionId);
+  const { data: results, isLoading } = useInspectionResults(imageId);
 
   if (isLoading) {
     return (
@@ -177,7 +176,7 @@ export function DefectAnalysis({ missionId }: DefectAnalysisProps) {
 
         {/* AI Model Info */}
         <p className="text-xs text-center text-muted-foreground">
-          Analyzed by Gemini 2.5 Pro • Multi-modal vision AI
+          Analyzed by YOLOv8 • Solar Panel Defect Detection Model
         </p>
       </CardContent>
     </Card>
