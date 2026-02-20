@@ -1,6 +1,7 @@
 import uuid
 import enum
-from sqlalchemy import String, ForeignKey, Enum, Index
+from datetime import datetime
+from sqlalchemy import String, ForeignKey, Enum, Index, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import mapped_column, Mapped
 from app.db.database import Base
@@ -32,3 +33,6 @@ class Panel(Base):
         nullable=False,
         default=PanelStatus.OK
     )
+
+    # Soft-delete timestamp
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

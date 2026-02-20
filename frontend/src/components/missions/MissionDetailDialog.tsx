@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useMissionImages, type Mission } from '@/hooks/useMissions';
+import { useMissionImages, useDeleteMissionImage, type Mission } from '@/hooks/useMissions';
 import { DefectAnalysis } from '@/components/missions/DefectAnalysis';
 import { cn } from '@/lib/utils';
 import { Image as ImageIcon, ScanEye } from 'lucide-react';
@@ -25,6 +25,7 @@ interface MissionDetailDialogProps {
 
 export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDetailDialogProps) {
   const { data: images, isLoading: imagesLoading } = useMissionImages(mission?.id ?? null);
+  const deleteMut = useDeleteMissionImage();
 
   if (!mission) return null;
 
@@ -94,16 +95,15 @@ export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDeta
                       />
                       {mission.status !== 'COMPLETED' && (
                         <button
-                          className="absolute top-2 right-2 bg-white/80 rounded p-1 text-danger hover:opacity-90"
-                          onClick={async (e) => {
+                          className="absolute top-2 right-2 bg-white/80 rounded p-1 text-danger hover:opacity-90 disabled:opacity-60"
+                          onClick={(e) => {
                             e.stopPropagation();
-                            // lazy-load delete mutation to avoid cyclic imports
-                            const { useDeleteMissionImage } = await import('@/hooks/useMissions');
-                            const deleteMut = useDeleteMissionImage();
+                            if (!confirm('Delete this image?')) return;
                             deleteMut.mutate({ imageId: img.id, missionId: mission.id });
                           }}
+                          disabled={deleteMut.isLoading}
                         >
-                          Delete
+                          {deleteMut.isLoading ? 'Deleting...' : 'Delete'}
                         </button>
                       )}
                     </div>

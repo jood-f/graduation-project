@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 from app.db.deps import get_db
 from app.models.telemetry import Telemetry
 from app.schemas.telemetry import TelemetryCreate, TelemetryOut
-from app.services.model_service import model_service
+
+# Lazily import the telemetry model service to avoid requiring heavy ML
+# dependencies (e.g. TensorFlow) at application startup.
+def _get_model_service():
+    from app.services.model_service import model_service
+    return model_service
 
 router = APIRouter(prefix="/api/v1/telemetry", tags=["Telemetry"])
 
@@ -73,8 +78,8 @@ def predict_power(
         for r in records
     ]
     
-    # Get predictions
-    predictions = model_service.predict_power(telemetry_data)
+    # Get predictions (lazy-load ML model service)
+    predictions = _get_model_service().predict_power(telemetry_data)
     
     if predictions is None:
         raise HTTPException(
@@ -136,8 +141,8 @@ def detect_anomalies(
         for r in records
     ]
     
-    # Detect anomalies
-    anomalies = model_service.detect_anomalies(telemetry_data, threshold)
+    # Detect anomalies (lazy-load ML model service)
+    anomalies = _get_model_service().detect_anomalies(telemetry_data, threshold)
     
     return {
         'panel_id': str(panel_id),
@@ -146,6 +151,53 @@ def detect_anomalies(
         'anomalies_detected': len(anomalies),
         'threshold': threshold,
         'anomalies': anomalies
+    }
+
+
+@router.post("/fit-scalers", response_model=dict)
+def fit_scalers_for_panel(
+    panel_id: uuid.UUID,
+    limit: int = Query(default=1000, ge=100, le=10000),
+    db: Session = Depends(get_db),
+):
+    """Fit telemetry scalers for a panel using historical records.
+
+    This forces the server-side StandardScalers to be fitted using up to `limit` recent
+    telemetry records. Requires at least 100 records.
+    """
+    # Fetch recent telemetry data (most-recent first)
+    records = (
+        db.query(Telemetry)
+        .filter(Telemetry.panel_id == panel_id)
+        .order_by(Telemetry.timestamp.desc())
+        .limit(limit)
+        .all()
+    )
+
+    if len(records) < 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient data to fit scalers. Need at least 100 records, found {len(records)}",
+        )
+
+    # Reverse to chronological order for scaler fitting
+    telemetry_data = [
+        {
+            'voltage': r.voltage,
+            'current': r.current,
+            'temperature': r.temperature,
+            'timestamp': r.timestamp.isoformat() if r.timestamp else None,
+        }
+        for r in reversed(records)
+    ]
+
+    fitted = _get_model_service().fit_scalers(telemetry_data)
+
+    return {
+        'panel_id': str(panel_id),
+        'fitted': fitted,
+        'records_used': len(records),
+        'message': 'Scalers fitted' if fitted else 'Failed to fit scalers'
     }
 
 
@@ -187,8 +239,8 @@ def predict_next_power(
         for r in records
     ]
     
-    # Predict next
-    prediction = model_service.predict_next(telemetry_data)
+    # Predict next (lazy-load ML model service)
+    prediction = _get_model_service().predict_next(telemetry_data)
     
     if prediction is None:
         raise HTTPException(
@@ -205,4 +257,4 @@ def predict_next_power(
 @router.get("/model-info", response_model=dict)
 def get_model_info():
     """Get information about the loaded ML model"""
-    return model_service.get_model_info()
+    return _get_model_service().get_model_info()

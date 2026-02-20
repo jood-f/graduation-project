@@ -9,6 +9,8 @@ class MissionImageCreate(BaseModel):
     mission_id: UUID
     storage_path: str
     content_type: str
+    width: Optional[int] = None
+    height: Optional[int] = None
     uploaded_by_user_id: Optional[UUID] = None
 
 
@@ -16,7 +18,10 @@ class MissionImageOut(BaseModel):
     id: UUID
     mission_id: UUID
     storage_path: str
+    storage_key: str
     content_type: str
+    width: int
+    height: int
     uploaded_by_user_id: Optional[UUID] = None
     uploaded_at: datetime
 

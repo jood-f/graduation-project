@@ -3,7 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import { analyzeImage } from '@/services/cvService';
+import { analyzeImage, checkModelAvailability } from '@/services/cvService';
+import { preprocessImage, detectDefects } from '@/lib/gemini';
+import { detectHighEdgeDensity } from '@/lib/imageHeuristics';
+import { useCreateInspectionResults } from './useAI';
 
 export interface Mission {
   id: string;
@@ -127,6 +130,7 @@ export function useUpdateMissionStatus() {
 export function useUploadMissionImage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const createInspection = useCreateInspectionResults();
 
   // Helper to get image dimensions
   const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
@@ -195,37 +199,102 @@ export function useUploadMissionImage() {
         throw new Error(`Database record failed: ${dbError.message}`);
       }
 
-      // AI Pipeline: YOLOv8 Vision-Based Defect Detection via Backend API
+      // AI Pipeline: prefer backend CV; if unavailable, fall back to client mock (Gemini)
       if (enableAI && imageData) {
         console.log('[Upload] Starting YOLOv8 AI analysis...');
-        try {
-          // Call the backend API to analyze the image
-          const analysis = await analyzeImage(imageData.id);
-          console.log('[Upload] AI analysis complete:', analysis);
 
-          // Show results
-          const defectCount = analysis.total_detections;
-          const failedDetections = analysis.detections.filter(d => d.status === 'FAIL');
-          const criticalDefects = failedDetections.filter(d => d.confidence > 0.8).length;
+        // Check backend CV availability first
+        const backendAvailable = await checkModelAvailability();
 
-          if (criticalDefects > 0) {
-            toast.warning(`AI detected ${criticalDefects} high-confidence defect(s)`, {
-              description: `Found: ${failedDetections.map(d => d.class_name).join(', ')}`,
+        if (backendAvailable) {
+          try {
+            const analysis = await analyzeImage(imageData.id);
+            console.log('[Upload] AI analysis complete (backend):', analysis);
+
+            const defectCount = analysis.total_detections;
+            const failedDetections = analysis.detections.filter(d => d.status === 'FAIL');
+            const criticalDefects = failedDetections.filter(d => d.confidence > 0.8).length;
+
+            if (criticalDefects > 0) {
+              toast.warning(`AI detected ${criticalDefects} high-confidence defect(s)`, {
+                description: `Found: ${failedDetections.map(d => d.class_name).join(', ')}`,
+              });
+            } else if (failedDetections.length > 0) {
+              toast.info(`AI detected ${failedDetections.length} potential defect(s)`, {
+                description: 'Review the inspection results for details',
+              });
+            } else if (defectCount > 0) {
+              toast.success('Image uploaded - Panel appears clean');
+            } else {
+              toast.success('Image uploaded - Analysis complete');
+            }
+          } catch (aiError) {
+            console.error('[Upload] AI processing error (backend):', aiError);
+            toast.warning('Image uploaded but AI analysis failed', {
+              description: 'Backend CV model encountered an error',
             });
-          } else if (failedDetections.length > 0) {
-            toast.info(`AI detected ${failedDetections.length} potential defect(s)`, {
-              description: 'Review the inspection results for details',
-            });
-          } else if (defectCount > 0) {
-            toast.success('Image uploaded - Panel appears clean');
-          } else {
-            toast.success('Image uploaded - Analysis complete');
           }
-        } catch (aiError) {
-          console.error('[Upload] AI processing error:', aiError);
-          toast.warning('Image uploaded but AI analysis failed', {
-            description: 'Backend CV model may not be available',
-          });
+        } else {
+          // Backend model not available — run client-side mock analysis (non-persistent)
+          try {
+            console.log('[Upload] Backend CV unavailable — running client mock analysis');
+            const base64 = await preprocessImage(file);
+            const detection = await detectDefects(base64, 'RGB');
+
+            // Convert detection result to inspection-result shape and store in client store
+            const mapped = (detection.defects || []).map((d) => ({
+              mission_id: missionId,
+              mission_image_id: imageData.id,
+              defect_type: d.type as any,
+              confidence: d.confidence,
+              bbox_x: d.bbox.x,
+              bbox_y: d.bbox.y,
+              bbox_width: d.bbox.width,
+              bbox_height: d.bbox.height,
+              description: d.description,
+              overall_condition: detection.overallCondition,
+              recommended_action: detection.recommendedAction,
+              created_at: new Date().toISOString(),
+            }));
+
+            if (mapped.length > 0) {
+              // save to client store (not persisted to backend DB)
+              await createInspection.mutationFn(mapped as any);
+              toast.info('Image uploaded — using client AI fallback (not persisted)');
+            } else {
+              // No defects returned from client AI — run a quick local heuristic (edge detection)
+              try {
+                const heuristic = await detectHighEdgeDensity(file);
+                if (heuristic.isLikelyDefect) {
+                  const auto = [{
+                    mission_id: missionId,
+                    mission_image_id: imageData.id,
+                    defect_type: 'CRACK',
+                    confidence: Math.min(0.99, 0.6 + heuristic.edgeRatio * 100),
+                    bbox_x: 0,
+                    bbox_y: 0,
+                    bbox_width: 0,
+                    bbox_height: 0,
+                    description: `Client heuristic detected edges (ratio=${heuristic.edgeRatio.toFixed(3)}, avgMag=${heuristic.avgMagnitude.toFixed(1)})`,
+                    overall_condition: 'POOR',
+                    recommended_action: 'Review image - possible structural damage',
+                    created_at: new Date().toISOString(),
+                  }];
+
+                  await createInspection.mutationFn(auto as any);
+                  toast.warning('Image uploaded — client heuristic detected a probable defect (local check)');
+                } else {
+                  toast.success('Image uploaded — client AI found no defects');
+                }
+              } catch (heurErr) {
+                console.error('Heuristic check failed:', heurErr);
+                toast.success('Image uploaded — client AI found no defects');
+              }
+            }
+          } catch (err) {
+            console.error('[Upload] client mock analysis failed:', err);
+            toast.warning('Image uploaded but client AI analysis failed');
+          }
         }
       }
 

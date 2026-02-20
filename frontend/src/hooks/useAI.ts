@@ -64,20 +64,89 @@ export function useCreateInspectionResults() {
 
   return useMutation({
     mutationFn: async (results: Omit<InspectionResult, 'id' | 'created_at'>[]) => {
-      // For now, just store in memory (until Supabase types are fixed)
-      console.log('Creating inspection results:', results);
-      
-      // Add to store with unique IDs
-      const resultsWithIds = results.map((r, i) => ({
-        ...r,
-        id: `${r.mission_id}-${Date.now()}-${i}`,
-        created_at: new Date().toISOString(),
-      }));
-      
-      useInspectionStore.addResults(resultsWithIds);
-      console.log('[useAI] Results added to store:', resultsWithIds);
-      toast.success(`AI detected ${results.length} defect(s)`);
-      return resultsWithIds;
+      console.log('Persisting inspection results (client heuristic):', results);
+
+      const persisted: any[] = [];
+      const localFallback: any[] = [];
+
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+
+        // Map client result shape to backend schema
+        const payload: any = {
+          mission_id: r.mission_id,
+          panel_id: (r as any).panel_id ?? null,
+          mission_image_id: r.mission_image_id ?? null,
+          defect_type: r.defect_type,
+          confidence: r.confidence,
+          bbox: (r.bbox_width != null && r.bbox_height != null)
+            ? { x: r.bbox_x ?? 0, y: r.bbox_y ?? 0, width: r.bbox_width, height: r.bbox_height }
+            : null,
+          notes: r.description ?? null,
+          model_version: 'client-heuristic-v1',
+        };
+
+        try {
+          let res = await fetch('http://127.0.0.1:8000/api/v1/inspection-results', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          // If FK error occurred because mission_image was removed, retry without mission_image_id
+          if (!res.ok && r.mission_image_id) {
+            console.warn('[useAI] Initial persist failed, retrying without mission_image_id');
+            const payloadNoImage = { ...payload, mission_image_id: null };
+            res = await fetch('http://127.0.0.1:8000/api/v1/inspection-results', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payloadNoImage),
+            });
+          }
+
+          if (!res.ok) {
+            throw new Error(`Server returned ${res.status}`);
+          }
+
+          const saved = await res.json();
+          // map server shape to local store shape
+          const mapped = {
+            id: saved.id,
+            mission_id: saved.mission_id,
+            mission_image_id: saved.mission_image_id ?? null,
+            defect_type: saved.defect_type,
+            confidence: saved.confidence,
+            bbox_x: saved.bbox?.x ?? undefined,
+            bbox_y: saved.bbox?.y ?? undefined,
+            bbox_width: saved.bbox?.width ?? undefined,
+            bbox_height: saved.bbox?.height ?? undefined,
+            description: saved.notes ?? null,
+            overall_condition: null,
+            recommended_action: null,
+            created_at: saved.inspected_at ?? new Date().toISOString(),
+          };
+
+          persisted.push(mapped);
+        } catch (err) {
+          console.warn('[useAI] Failed to persist to backend, falling back to local store:', err);
+          // create local fallback entry (keeps previous behavior)
+          const fallback = {
+            ...r,
+            id: `${r.mission_id}-${Date.now()}-${i}`,
+            created_at: new Date().toISOString(),
+          };
+          localFallback.push(fallback);
+        }
+      }
+
+      // Add persisted + fallback to in-memory store so UI updates the same way
+      const toAdd = [...persisted, ...localFallback];
+      if (toAdd.length > 0) {
+        useInspectionStore.addResults(toAdd);
+        toast.success(`AI detected ${toAdd.length} defect(s)`);
+      }
+
+      return toAdd;
     },
     onSuccess: (_, variables) => {
       if (variables.length > 0) {

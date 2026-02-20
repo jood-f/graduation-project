@@ -1,8 +1,8 @@
-
 import os
 import uuid
 import tempfile
 import httpx
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -16,6 +16,10 @@ from app.schemas.mission_images import MissionImageCreate, MissionImageOut, Anal
 from app.services.cv_service import get_cv_service
 from app.models.mission import Mission
 
+# Configure logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 router = APIRouter(prefix="/api/v1/mission-images", tags=["Mission Images"])
 
 
@@ -27,6 +31,11 @@ def create_mission_image(payload: MissionImageCreate, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Mission not found")
 
     img = MissionImage(**payload.model_dump())
+    # Back-compat / quick-fix: populate storage_key from storage_path so DB NOT NULL constraint is satisfied
+    img.storage_key = payload.storage_path
+    # ensure width/height exist (DB expects NOT NULL)
+    img.width = getattr(payload, 'width', 0) or 0
+    img.height = getattr(payload, 'height', 0) or 0
     db.add(img)
     db.commit()
     db.refresh(img)
@@ -83,32 +92,39 @@ def analyze_mission_image(
     # Build the Supabase storage URL
     storage_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{img.storage_path}"
     
+    # Add logging for storage_url and tmp_path
+    logger.info(f"Fetching image from storage URL: {storage_url}")
+
     try:
         # Download image to temp file
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
             tmp_path = tmp_file.name
-        
+        logger.info(f"Temporary file created at: {tmp_path}")
+
         # Download from Supabase storage
         with httpx.Client() as client:
             response = client.get(storage_url)
             if response.status_code != 200:
+                logger.error(f"Failed to fetch image. HTTP status: {response.status_code}")
                 raise HTTPException(
                     status_code=404,
                     detail=f"Could not fetch image from storage: {img.storage_path}"
                 )
-            with open(tmp_path, "wb") as f:
-                f.write(response.content)
-        
+        logger.info(f"Image successfully downloaded to: {tmp_path}")
+
         # Run detection
         detections = cv_service.detect(tmp_path, confidence_threshold)
-        
+        logger.info(f"Detections: {detections}")
+
         # Clean up temp file
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
-        
+            logger.info(f"Temporary file deleted: {tmp_path}")
+
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
     # Store each detection as an inspection result
@@ -138,6 +154,94 @@ def analyze_mission_image(
     db.commit()
     
     # Refresh to get IDs
+    for result in inspection_results:
+        db.refresh(result)
+
+    return AnalysisResponse(
+        image_id=img.id,
+        storage_path=img.storage_path,
+        detections=[
+            DetectionResult(
+                inspection_id=result.id,
+                class_name=result.defect_type,
+                confidence=result.confidence,
+                bbox=result.bbox,
+                status=result.status.value
+            )
+            for result in inspection_results
+        ],
+        total_detections=len(inspection_results)
+    )
+
+
+@router.post("/{image_id}/re-analyze", response_model=AnalysisResponse)
+def reanalyze_mission_image(
+    image_id: uuid.UUID,
+    confidence_threshold: float = Query(default=0.5, ge=0.0, le=1.0),
+    db: Session = Depends(get_db)
+):
+    """Delete previous inspection results for the image and run detection again."""
+    img = db.query(MissionImage).filter(MissionImage.id == image_id).first()
+    if not img:
+        raise HTTPException(status_code=404, detail="Mission image not found")
+
+    # Delete existing inspection results for this image
+    db.query(InspectionResult).filter(InspectionResult.mission_image_id == image_id).delete()
+    db.commit()
+
+    # Re-run detection (same as analyze_mission_image)
+    cv_service = get_cv_service()
+    if not cv_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="CV model not available. Please ensure the model is trained and deployed."
+        )
+
+    storage_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{img.storage_path}"
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+            tmp_path = tmp_file.name
+
+        with httpx.Client() as client:
+            response = client.get(storage_url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=404, detail=f"Could not fetch image from storage: {img.storage_path}")
+            with open(tmp_path, "wb") as f:
+                f.write(response.content)
+
+        detections = cv_service.detect(tmp_path, confidence_threshold)
+
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Re-analysis failed: {str(e)}")
+
+    inspection_results = []
+    for detection in detections:
+        class_name = detection["class_name"]
+        if class_name == "Clean":
+            status = InspectionStatus.PASS_
+        else:
+            status = InspectionStatus.FAIL
+
+        inspection = InspectionResult(
+            mission_id=img.mission_id,
+            mission_image_id=img.id,
+            panel_id=None,
+            status=status,
+            defect_type=class_name,
+            confidence=detection["confidence"],
+            bbox=detection["bbox"],
+            notes=None,
+            model_version=cv_service.model_version,
+        )
+        db.add(inspection)
+        inspection_results.append(inspection)
+
+    db.commit()
     for result in inspection_results:
         db.refresh(result)
 

@@ -24,6 +24,15 @@ class InspectionResultCreate(BaseModel):
     model_version: Optional[str] = None
 
 
+class InspectionResultUpdate(BaseModel):
+    status: Optional[InspectionStatus] = None
+    defect_type: Optional[str] = None
+    confidence: Optional[float] = None
+    bbox: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
+    model_version: Optional[str] = None
+
+
 class InspectionResultOut(BaseModel):
     id: uuid.UUID
     mission_id: uuid.UUID

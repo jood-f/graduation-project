@@ -9,6 +9,7 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from tensorflow import keras
 from sklearn.preprocessing import StandardScaler
+import joblib
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,8 @@ class TelemetryModelService:
         self.sequence_length = 20
         self.is_fitted = False
         self._load_model()
+        # Load training-time scalers if they exist
+        self._load_scalers()
     
     def _load_model(self):
         """Load the trained LSTM model"""
@@ -38,6 +41,52 @@ class TelemetryModelService:
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             self.model = None
+    
+    def _load_scalers(self):
+        """Load scalers saved during training if available. Tries multiple candidate locations.
+
+        We prefer the ml/ folder next to the repository root but also try the current working
+        directory (useful when uvicorn changes CWD).
+        """
+        candidates = []
+
+        # Preferred: repository-root/ml
+        repo_ml = Path(__file__).parent.parent.parent.parent / "ml"
+        candidates.append(repo_ml)
+
+        # Fallback: CWD/ml
+        cwd_ml = Path.cwd() / "ml"
+        if cwd_ml != repo_ml:
+            candidates.append(cwd_ml)
+
+        # Also try relative to this file (defensive)
+        relative_ml = Path(__file__).parent.parent.parent / "ml"
+        if relative_ml not in candidates:
+            candidates.append(relative_ml)
+
+        x_path = None
+        y_path = None
+        for c in candidates:
+            tx = c / "telemetry_scaler_X.joblib"
+            ty = c / "telemetry_scaler_y.joblib"
+            logger.debug(f"Checking scaler candidate path: {tx}")
+            if tx.exists() and ty.exists():
+                x_path = tx
+                y_path = ty
+                logger.info(f"Found telemetry scalers in {c}")
+                break
+
+        if x_path is None or y_path is None:
+            logger.info(f"No telemetry scaler files found in candidates: {candidates}")
+            return
+
+        try:
+            self.scaler_X = joblib.load(str(x_path))
+            self.scaler_y = joblib.load(str(y_path))
+            self.is_fitted = True
+            logger.info(f"Loaded telemetry scalers from {x_path} and {y_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load telemetry scalers: {e}")
     
     def fit_scalers(self, telemetry_data: List[Dict]):
         """Fit scalers on historical data"""
@@ -104,8 +153,15 @@ class TelemetryModelService:
         
         # Make predictions
         predictions_scaled = self.model.predict(sequences, verbose=0)
-        predictions = self.scaler_y.inverse_transform(predictions_scaled)
-        
+        # Accept models that either predict scaled targets (z-scores) or raw power.
+        preds_arr = np.asarray(predictions_scaled).reshape(-1, 1)
+        if hasattr(self.scaler_y, 'scale_') and np.nanmax(np.abs(preds_arr)) < 50:
+            # small-magnitude outputs look like scaled values -> inverse transform
+            predictions = self.scaler_y.inverse_transform(preds_arr)
+        else:
+            # large-magnitude outputs look like raw power -> use as-is
+            predictions = preds_arr
+
         # Calculate actual power and errors
         results = []
         for i, pred in enumerate(predictions):
@@ -196,8 +252,12 @@ class TelemetryModelService:
         # Create sequence and predict
         sequence = scaled.reshape(1, self.sequence_length, 3)
         prediction_scaled = self.model.predict(sequence, verbose=0)
-        prediction = self.scaler_y.inverse_transform(prediction_scaled)
-        
+        pred_arr = np.asarray(prediction_scaled).reshape(-1, 1)
+        if hasattr(self.scaler_y, 'scale_') and np.nanmax(np.abs(pred_arr)) < 50:
+            prediction = self.scaler_y.inverse_transform(pred_arr)
+        else:
+            prediction = pred_arr
+
         return {
             'predicted_power': round(float(prediction[0][0]), 2),
             'based_on_records': self.sequence_length,

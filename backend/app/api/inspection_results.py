@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.models.inspection_result import InspectionResult
-from app.schemas.inspection_result import InspectionResultCreate, InspectionResultOut
+from app.schemas.inspection_result import InspectionResultCreate, InspectionResultOut, InspectionResultUpdate
 
 router = APIRouter(prefix="/api/v1/inspection-results", tags=["Inspection Results"])
 
@@ -44,4 +44,30 @@ def get_inspection_result(inspection_id: uuid.UUID, db: Session = Depends(get_db
     row = db.query(InspectionResult).filter(InspectionResult.id == inspection_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Inspection result not found")
+    return row
+
+
+@router.patch("/{inspection_id}", response_model=InspectionResultOut)
+def update_inspection_result(inspection_id: uuid.UUID, payload: InspectionResultUpdate, db: Session = Depends(get_db)):
+    row = db.query(InspectionResult).filter(InspectionResult.id == inspection_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Inspection result not found")
+
+    # Update allowed fields
+    if payload.status is not None:
+        row.status = payload.status
+    if payload.defect_type is not None:
+        row.defect_type = payload.defect_type
+    if payload.confidence is not None:
+        row.confidence = payload.confidence
+    if payload.bbox is not None:
+        row.bbox = payload.bbox
+    if payload.notes is not None:
+        row.notes = payload.notes
+    if payload.model_version is not None:
+        row.model_version = payload.model_version
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
     return row
