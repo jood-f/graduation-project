@@ -11,6 +11,9 @@ def cv_status():
     service = get_cv_service()
     return {
         "available": service.is_available(),
+        "mode": getattr(service, "detection_mode", "none"),
+        "yolo_available": service.is_yolo_available() if hasattr(service, "is_yolo_available") else False,
+        "reason": getattr(service, "unavailable_reason", None),
         "model_path": service.model_path,
         "model_version": getattr(service, "model_version", None),
     }

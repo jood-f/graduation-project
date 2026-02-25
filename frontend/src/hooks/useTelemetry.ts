@@ -13,6 +13,12 @@ export interface Telemetry {
   power?: number;
 }
 
+export interface LatestTelemetryResult {
+  telemetry: Telemetry[];
+  isFallback: boolean;
+  anchorTimestamp: string | null;
+}
+
 export interface TelemetryPrediction {
   timestamp: string;
   actual_power: number;
@@ -161,7 +167,7 @@ export function useNextPrediction(panelId: string) {
 export function useLatestTelemetry(hours: number = 12) {
   return useQuery({
     queryKey: ['latest-telemetry', hours],
-    queryFn: async () => {
+    queryFn: async (): Promise<LatestTelemetryResult> => {
       const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
       const { data, error } = await (supabase as any)
@@ -172,10 +178,58 @@ export function useLatestTelemetry(hours: number = 12) {
 
       if (error) throw error;
 
-      return (data as Telemetry[]).map(t => ({
+      const recentTelemetry = (data as Telemetry[]).map(t => ({
         ...t,
         power: t.voltage * t.current,
       }));
+
+      if (recentTelemetry.length > 0) {
+        return {
+          telemetry: recentTelemetry,
+          isFallback: false,
+          anchorTimestamp: null,
+        };
+      }
+
+      // No records in the last `hours`: fall back to a window ending at the latest available record.
+      const { data: latestRow, error: latestError } = await (supabase as any)
+        .from('telemetry')
+        .select('timestamp')
+        .order('timestamp', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestError) throw latestError;
+      if (!latestRow?.timestamp) {
+        return {
+          telemetry: [],
+          isFallback: false,
+          anchorTimestamp: null,
+        };
+      }
+
+      const latestTimestamp = latestRow.timestamp as string;
+      const fallbackSince = new Date(
+        new Date(latestTimestamp).getTime() - hours * 60 * 60 * 1000
+      ).toISOString();
+
+      const { data: fallbackData, error: fallbackError } = await (supabase as any)
+        .from('telemetry')
+        .select('*')
+        .gte('timestamp', fallbackSince)
+        .lte('timestamp', latestTimestamp)
+        .order('timestamp', { ascending: true });
+
+      if (fallbackError) throw fallbackError;
+
+      return {
+        telemetry: (fallbackData as Telemetry[]).map(t => ({
+          ...t,
+          power: t.voltage * t.current,
+        })),
+        isFallback: true,
+        anchorTimestamp: latestTimestamp,
+      };
     },
     refetchInterval: 1000 * 60, // Refresh every minute
   });

@@ -1,13 +1,18 @@
+import { FC } from 'react';
+import { AlertTriangle, CheckCircle, Droplet, Flame, Snowflake, Sparkles, Wrench } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useInspectionResults, type InspectionResult } from '@/hooks/useAI';
-import { AlertTriangle, CheckCircle, Flame, Snowflake, Droplet, Wrench, Sparkles } from 'lucide-react';
+import { useMissionFaults } from '@/hooks/useFaults';
 import { cn } from '@/lib/utils';
-import { FC } from 'react';
+import { toast } from 'sonner';
 
 interface DefectAnalysisProps {
-  imageId: string;
+  missionId: string;
+  imageCount: number;
+  missionImages: { id: string; storage_path: string; url?: string }[];
 }
 
 const defectIcons = {
@@ -33,8 +38,96 @@ const conditionStyles = {
   CRITICAL: 'bg-destructive/10 text-destructive border-destructive/20',
 } as const;
 
-const DefectAnalysis: FC<DefectAnalysisProps> = ({ imageId }) => {
-  const { data: results, isLoading, error } = useInspectionResults(imageId);
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+
+type RawDetection = {
+  inspection_id: string;
+  class_name: string;
+  confidence: number;
+  bbox: { x?: number; y?: number; width?: number; height?: number } | null;
+  status: 'PASS' | 'FAIL' | 'REVIEW';
+  model_version?: string | null;
+  notes?: string | null;
+};
+
+type ImageDebugResult = {
+  imageId: string;
+  storagePath: string;
+  imageUrl?: string;
+  detections: RawDetection[];
+  error?: string;
+};
+
+const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missionImages }) => {
+  const queryClient = useQueryClient();
+  const { data: results, isLoading, error } = useMissionFaults(missionId);
+
+  const reanalyzeMutation = useMutation({
+    mutationFn: async ({ imageId, threshold = 0.5 }: { imageId: string; threshold?: number }) => {
+      const response = await fetch(
+        `${API_BASE_URL}/mission-images/${imageId}/re-analyze?confidence_threshold=${threshold}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+      );
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Failed to re-analyze image');
+      }
+
+      return await response.json();
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['mission-cv-raw-by-image', missionId] });
+      queryClient.invalidateQueries({ queryKey: ['mission-cv-faults', missionId] });
+      toast.success(`Re-analysis completed for image ${vars.imageId.slice(0, 8)}...`);
+    },
+    onError: (err) => {
+      toast.error(`Re-analysis failed: ${(err as Error).message}`);
+    },
+  });
+
+  const {
+    data: rawByImage,
+    isLoading: rawLoading,
+  } = useQuery({
+    queryKey: ['mission-cv-raw-by-image', missionId, missionImages.map((img) => img.id).join(',')],
+    queryFn: async (): Promise<ImageDebugResult[]> => {
+      const rows = await Promise.all(
+        missionImages.map(async (img) => {
+          try {
+            const res = await fetch(`${API_BASE_URL}/mission-images/${img.id}/results`);
+            if (!res.ok) {
+              return {
+                imageId: img.id,
+                storagePath: img.storage_path,
+                imageUrl: img.url,
+                detections: [],
+                error: `HTTP ${res.status}`,
+              } as ImageDebugResult;
+            }
+
+            const detections = (await res.json()) as RawDetection[];
+            return {
+              imageId: img.id,
+              storagePath: img.storage_path,
+              imageUrl: img.url,
+              detections,
+            } as ImageDebugResult;
+          } catch (e) {
+            return {
+              imageId: img.id,
+              storagePath: img.storage_path,
+              imageUrl: img.url,
+              detections: [],
+              error: e instanceof Error ? e.message : 'Request failed',
+            } as ImageDebugResult;
+          }
+        })
+      );
+      return rows;
+    },
+    enabled: imageCount > 0 && missionImages.length > 0,
+  });
 
   if (isLoading) {
     return (
@@ -73,6 +166,138 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ imageId }) => {
     );
   }
 
+  if (imageCount < 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI Defect Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const renderRawDebugSection = () => (
+    <div className="space-y-3 border-t pt-4">
+      <h4 className="text-sm font-medium">Raw CV Results (Debug)</h4>
+      {rawLoading && (
+        <div className="space-y-2">
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
+      )}
+      {!rawLoading && (!rawByImage || rawByImage.length === 0) && (
+        <p className="text-xs text-muted-foreground">No image-level CV results were returned.</p>
+      )}
+      {!rawLoading && rawByImage?.map((item) => (
+        <div key={item.imageId} className="rounded-lg border p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium truncate">Image: {item.storagePath}</p>
+              <p className="text-[11px] text-muted-foreground font-mono">{item.imageId}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                {item.detections.length} detection(s)
+              </Badge>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={reanalyzeMutation.isPending}
+                onClick={() => reanalyzeMutation.mutate({ imageId: item.imageId, threshold: 0.5 })}
+              >
+                {reanalyzeMutation.isPending ? 'Re-analyzing...' : 'Re-analyze'}
+              </Button>
+            </div>
+          </div>
+
+          {item.imageUrl && (
+            <img src={item.imageUrl} alt={item.storagePath} className="h-24 w-40 object-cover rounded border" />
+          )}
+
+          {item.error && (
+            <p className="text-xs text-destructive">Failed to fetch detections: {item.error}</p>
+          )}
+
+          {!item.error && item.detections.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No detections returned for this image (model may classify it as clean or miss defects).
+            </p>
+          )}
+
+          {!item.error && item.detections.length > 0 && (
+            <div className="space-y-1">
+              {item.detections.map((d) => {
+                const bbox = d.bbox || {};
+                return (
+                  <div key={d.inspection_id} className="text-xs rounded border bg-muted/40 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">
+                        class: {d.class_name}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-[10px]',
+                          d.status === 'FAIL'
+                            ? 'border-destructive/30 text-destructive'
+                            : d.status === 'PASS'
+                            ? 'border-success/30 text-success'
+                            : ''
+                        )}
+                      >
+                        {d.status}
+                      </Badge>
+                    </div>
+                    {d.model_version && (
+                      <p>model: {d.model_version}</p>
+                    )}
+                    <p>confidence: {(d.confidence * 100).toFixed(2)}%</p>
+                    <p>
+                      bbox: x={Number(bbox.x || 0).toFixed(4)} y={Number(bbox.y || 0).toFixed(4)} w={Number(bbox.width || 0).toFixed(4)} h={Number(bbox.height || 0).toFixed(4)}
+                    </p>
+                    {d.notes && <p>notes: {d.notes}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
+  if (imageCount === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI Defect Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <p className="text-sm font-medium">No Images Available</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Upload mission images to run CV analysis and see defects.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!results || results.length === 0) {
     return (
       <Card>
@@ -86,21 +311,28 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ imageId }) => {
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <CheckCircle className="h-12 w-12 text-success mb-3" />
             <p className="text-sm font-medium">No Defects Detected</p>
-            <p className="text-xs text-muted-foreground mt-1">AI analysis found no issues with the inspected panels</p>
+            <p className="text-xs text-muted-foreground mt-1">CV analysis found no issues in mission images.</p>
           </div>
+          {renderRawDebugSection()}
         </CardContent>
       </Card>
     );
   }
 
-  const overallCondition = results[0]?.overall_condition;
-  const recommendedAction = results[0]?.recommended_action;
-
-  const defectsByType = results.reduce<Record<string, InspectionResult[]>>((acc, result) => {
-    if (!acc[result.defect_type]) acc[result.defect_type] = [];
-    acc[result.defect_type].push(result);
+  const defectsByType = results.reduce((acc, result) => {
+    if (!acc[result.fault_type]) acc[result.fault_type] = [] as typeof results;
+    acc[result.fault_type].push(result);
     return acc;
-  }, {});
+  }, {} as Record<string, typeof results>);
+
+  const maxConfidence = Math.max(...results.map((r) => r.confidence));
+  const overallCondition =
+    maxConfidence >= 0.9 ? 'CRITICAL' : maxConfidence >= 0.8 ? 'POOR' : maxConfidence >= 0.7 ? 'FAIR' : 'GOOD';
+
+  const recommendedAction =
+    maxConfidence >= 0.85
+      ? 'High priority: review detected defects and schedule maintenance.'
+      : 'Review detected defects and continue monitoring.';
 
   return (
     <Card>
@@ -110,18 +342,21 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ imageId }) => {
             <Sparkles className="h-5 w-5 text-primary" />
             AI Defect Analysis
           </CardTitle>
-          {overallCondition && <Badge className={cn(conditionStyles[overallCondition])}>{overallCondition}</Badge>}
+          <Badge className={cn(conditionStyles[overallCondition])}>{overallCondition}</Badge>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {Object.entries(defectsByType).map(([type, defects]) => {
-            const Icon = defectIcons[type as keyof typeof defectIcons];
+            const Icon = defectIcons[type as keyof typeof defectIcons] || AlertTriangle;
             const avgConfidence = defects.reduce((s, d) => s + d.confidence, 0) / defects.length;
             return (
               <div key={type} className="flex flex-col items-center p-3 rounded-lg border bg-muted/50">
-                <Icon className={cn('h-6 w-6 mb-2', defectColors[type as keyof typeof defectColors])} aria-label={type} />
+                <Icon
+                  className={cn('h-6 w-6 mb-2', defectColors[type as keyof typeof defectColors] || 'text-muted-foreground')}
+                  aria-label={type}
+                />
                 <span className="text-2xl font-bold">{defects.length}</span>
                 <span className="text-xs text-muted-foreground capitalize">{type.toLowerCase().replace('_', ' ')}</span>
                 <span className="text-xs text-muted-foreground mt-1">{(avgConfidence * 100).toFixed(0)}% conf.</span>
@@ -134,17 +369,33 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ imageId }) => {
           <h4 className="text-sm font-medium">Detected Defects</h4>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {results.map((result) => {
-              const Icon = defectIcons[result.defect_type];
+              const Icon = defectIcons[result.fault_type as keyof typeof defectIcons] || AlertTriangle;
+              const bbox = result.bbox || {};
+
               return (
                 <div key={result.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card text-sm">
-                  <Icon className={cn('h-5 w-5 mt-0.5', defectColors[result.defect_type])} aria-label={result.defect_type} />
+                  <Icon
+                    className={cn(
+                      'h-5 w-5 mt-0.5',
+                      defectColors[result.fault_type as keyof typeof defectColors] || 'text-muted-foreground'
+                    )}
+                    aria-label={result.fault_type}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium capitalize">{result.defect_type.toLowerCase().replace('_', ' ')}</span>
-                      <Badge variant="outline" className="text-xs">{(result.confidence * 100).toFixed(0)}% confidence</Badge>
+                      <span className="font-medium capitalize">{result.fault_type.toLowerCase().replace('_', ' ')}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {(result.confidence * 100).toFixed(0)}% confidence
+                      </Badge>
                     </div>
-                    {result.description && <p className="text-xs text-muted-foreground mt-1">{result.description}</p>}
-                    <p className="text-xs text-muted-foreground mt-1">Location: [{result.bbox_x.toFixed(3)}, {result.bbox_y.toFixed(3)}] Size: {result.bbox_width.toFixed(3)} × {result.bbox_height.toFixed(3)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Image: {result.storage_path || 'Unknown'}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Location: [{Number(bbox.x || 0).toFixed(3)}, {Number(bbox.y || 0).toFixed(3)}] Size:{' '}
+                      {Number(bbox.width || 0).toFixed(3)} x {Number(bbox.height || 0).toFixed(3)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Detected at: {new Date(result.detected_at).toLocaleString()}
+                    </p>
                   </div>
                 </div>
               );
@@ -152,14 +403,14 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ imageId }) => {
           </div>
         </div>
 
-        {recommendedAction && (
-          <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-            <p className="text-sm font-medium text-primary mb-1">Recommended Action</p>
-            <p className="text-sm text-muted-foreground">{recommendedAction}</p>
-          </div>
-        )}
+        <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+          <p className="text-sm font-medium text-primary mb-1">Recommended Action</p>
+          <p className="text-sm text-muted-foreground">{recommendedAction}</p>
+        </div>
 
-        <p className="text-xs text-center text-muted-foreground">Analyzed by YOLOv8 • Solar Panel Defect Detection Model</p>
+        {renderRawDebugSection()}
+
+        <p className="text-xs text-center text-muted-foreground">Analyzed by YOLOv8 - Solar Panel Defect Detection Model</p>
       </CardContent>
     </Card>
   );

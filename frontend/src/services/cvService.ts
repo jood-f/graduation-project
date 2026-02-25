@@ -16,6 +16,8 @@ export interface DetectionResult {
     height: number;
   } | null;
   status: 'PASS' | 'FAIL' | 'REVIEW';
+  model_version?: string | null;
+  notes?: string | null;
 }
 
 export interface AnalysisResponse {

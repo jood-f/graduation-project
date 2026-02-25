@@ -1,9 +1,10 @@
 import os
 import uuid
 import tempfile
-import httpx
 import logging
 from typing import List
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -14,13 +15,107 @@ from app.models.mission_images import MissionImage
 from app.models.inspection_result import InspectionResult, InspectionStatus
 from app.schemas.mission_images import MissionImageCreate, MissionImageOut, AnalysisResponse, DetectionResult
 from app.services.cv_service import get_cv_service
-from app.models.mission import Mission
 
 # Configure logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/api/v1/mission-images", tags=["Mission Images"])
+
+
+def _build_detection_notes(detection: dict, default_threshold: float) -> str:
+    threshold = detection.get("used_confidence_threshold", default_threshold)
+    source = detection.get("source", "model")
+    parts = [f"source={source}", f"confidence_threshold={threshold}"]
+
+    heuristic_label = detection.get("heuristic_label")
+    if heuristic_label:
+        parts.append(f"heuristic_label={heuristic_label}")
+
+    heuristic_score = detection.get("heuristic_score")
+    if heuristic_score is not None:
+        parts.append(f"heuristic_score={heuristic_score}")
+
+    return "; ".join(parts)
+
+
+def _run_cv_detection_with_fallback(
+    cv_service,
+    image_path: str,
+    requested_threshold: float,
+    image_id: uuid.UUID,
+) -> List[dict]:
+    """
+    Run CV detection with fallback thresholds when the first pass returns no detections.
+    """
+    first_threshold = max(0.0, min(1.0, float(requested_threshold)))
+    thresholds = [round(first_threshold, 2)]
+
+    for candidate in (0.35, 0.2):
+        if candidate < first_threshold and candidate not in thresholds:
+            thresholds.append(candidate)
+
+    for threshold in thresholds:
+        detections = cv_service.detect(image_path, threshold)
+        logger.info(
+            "CV detection pass image_id=%s threshold=%.2f detections=%s",
+            image_id,
+            threshold,
+            len(detections),
+        )
+
+        if detections:
+            for detection in detections:
+                detection["used_confidence_threshold"] = threshold
+            return detections
+
+    logger.warning(
+        "CV detection returned no results after fallback image_id=%s thresholds=%s",
+        image_id,
+        thresholds,
+    )
+    return []
+
+
+def _download_image_from_storage(storage_path: str, tmp_path: str) -> None:
+    if not storage_path:
+        raise HTTPException(status_code=422, detail="Mission image has no storage path")
+
+    storage_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{storage_path}"
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+
+    request = Request(storage_url, headers=headers, method="GET")
+    try:
+        with urlopen(request, timeout=30) as response:
+            status_code = response.getcode()
+            content_type = (response.headers.get("Content-Type", "") or "").lower()
+            content = response.read()
+    except HTTPError as exc:
+        status_code = exc.code
+        logger.error("Failed to fetch image from storage path=%s status=%s", storage_path, status_code)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not fetch image from storage: {storage_path}",
+        ) from exc
+    except URLError as exc:
+        logger.error("Storage request failed for path=%s error=%s", storage_path, str(exc))
+        raise HTTPException(status_code=502, detail="Storage service request failed") from exc
+
+    if status_code != 200:
+        logger.error("Failed to fetch image from storage path=%s status=%s", storage_path, status_code)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not fetch image from storage: {storage_path}",
+        )
+
+    if "image" not in content_type:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid image content-type from storage: {content_type or 'unknown'}",
+        )
+
+    with open(tmp_path, "wb") as f:
+        f.write(content)
 
 
 @router.post("", response_model=MissionImageOut)
@@ -84,55 +179,43 @@ def analyze_mission_image(
     # Get CV service
     cv_service = get_cv_service()
     if not cv_service.is_available():
+        reason = getattr(cv_service, "unavailable_reason", "unknown reason")
         raise HTTPException(
             status_code=503, 
-            detail="CV model not available. Please ensure the model is trained and deployed."
+            detail=f"CV model not available. Reason: {reason}"
         )
-
-    # Build the Supabase storage URL
-    storage_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{img.storage_path}"
-    
-    # Add logging for storage_url and tmp_path
-    logger.info(f"Fetching image from storage URL: {storage_url}")
 
     try:
         # Download image to temp file
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
             tmp_path = tmp_file.name
-        logger.info(f"Temporary file created at: {tmp_path}")
+        logger.info("Temporary file created at: %s", tmp_path)
 
-        # Download from Supabase storage
-        with httpx.Client() as client:
-            response = client.get(storage_url)
-            if response.status_code != 200:
-                logger.error(f"Failed to fetch image. HTTP status: {response.status_code}")
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Could not fetch image from storage: {img.storage_path}"
-                )
-        logger.info(f"Image successfully downloaded to: {tmp_path}")
-
-        # Run detection
-        detections = cv_service.detect(tmp_path, confidence_threshold)
-        logger.info(f"Detections: {detections}")
-
-        # Clean up temp file
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-            logger.info(f"Temporary file deleted: {tmp_path}")
+        _download_image_from_storage(img.storage_path, tmp_path)
+        detections = _run_cv_detection_with_fallback(
+            cv_service=cv_service,
+            image_path=tmp_path,
+            requested_threshold=confidence_threshold,
+            image_id=image_id,
+        )
+        logger.info("Final detection count for image_id=%s: %s", image_id, len(detections))
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Analysis failed: {str(e)}")
+        logger.error("Analysis failed for image_id=%s: %s", image_id, str(e))
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+    finally:
+        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
     # Store each detection as an inspection result
     inspection_results = []
     for detection in detections:
         # Determine status based on detection
         class_name = detection["class_name"]
-        if class_name == "Clean":
+        normalized_class = (class_name or "").strip().lower()
+        if normalized_class in {"clean", "normal", "no defect", "no_defect", "no-defect"}:
             status = InspectionStatus.PASS_
         else:
             status = InspectionStatus.FAIL
@@ -145,7 +228,7 @@ def analyze_mission_image(
             defect_type=class_name,
             confidence=detection["confidence"],
             bbox=detection["bbox"],
-            notes=None,
+            notes=_build_detection_notes(detection, confidence_threshold),
             model_version=cv_service.model_version,
         )
         db.add(inspection)
@@ -166,7 +249,9 @@ def analyze_mission_image(
                 class_name=result.defect_type,
                 confidence=result.confidence,
                 bbox=result.bbox,
-                status=result.status.value
+                status=result.status.value,
+                model_version=result.model_version,
+                notes=result.notes,
             )
             for result in inspection_results
         ],
@@ -192,37 +277,37 @@ def reanalyze_mission_image(
     # Re-run detection (same as analyze_mission_image)
     cv_service = get_cv_service()
     if not cv_service.is_available():
+        reason = getattr(cv_service, "unavailable_reason", "unknown reason")
         raise HTTPException(
             status_code=503,
-            detail="CV model not available. Please ensure the model is trained and deployed."
+            detail=f"CV model not available. Reason: {reason}"
         )
 
-    storage_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{img.storage_path}"
     try:
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
             tmp_path = tmp_file.name
 
-        with httpx.Client() as client:
-            response = client.get(storage_url)
-            if response.status_code != 200:
-                raise HTTPException(status_code=404, detail=f"Could not fetch image from storage: {img.storage_path}")
-            with open(tmp_path, "wb") as f:
-                f.write(response.content)
-
-        detections = cv_service.detect(tmp_path, confidence_threshold)
-
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        _download_image_from_storage(img.storage_path, tmp_path)
+        detections = _run_cv_detection_with_fallback(
+            cv_service=cv_service,
+            image_path=tmp_path,
+            requested_threshold=confidence_threshold,
+            image_id=image_id,
+        )
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Re-analysis failed: {str(e)}")
+    finally:
+        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
     inspection_results = []
     for detection in detections:
         class_name = detection["class_name"]
-        if class_name == "Clean":
+        normalized_class = (class_name or "").strip().lower()
+        if normalized_class in {"clean", "normal", "no defect", "no_defect", "no-defect"}:
             status = InspectionStatus.PASS_
         else:
             status = InspectionStatus.FAIL
@@ -235,7 +320,7 @@ def reanalyze_mission_image(
             defect_type=class_name,
             confidence=detection["confidence"],
             bbox=detection["bbox"],
-            notes=None,
+            notes=_build_detection_notes(detection, confidence_threshold),
             model_version=cv_service.model_version,
         )
         db.add(inspection)
@@ -254,7 +339,9 @@ def reanalyze_mission_image(
                 class_name=result.defect_type,
                 confidence=result.confidence,
                 bbox=result.bbox,
-                status=result.status.value
+                status=result.status.value,
+                model_version=result.model_version,
+                notes=result.notes,
             )
             for result in inspection_results
         ],
@@ -281,7 +368,9 @@ def get_image_analysis_results(image_id: uuid.UUID, db: Session = Depends(get_db
             class_name=r.defect_type,
             confidence=r.confidence,
             bbox=r.bbox,
-            status=r.status.value
+            status=r.status.value,
+            model_version=r.model_version,
+            notes=r.notes,
         )
         for r in results
     ]
@@ -293,18 +382,23 @@ def delete_mission_image(image_id: uuid.UUID, db: Session = Depends(get_db)):
     if not img:
         raise HTTPException(status_code=404, detail="Mission image not found")
 
-    # Prevent deletion if mission is completed
+    # Allow deletion only while mission is in-flight
     mission = db.query(Mission).filter(Mission.id == img.mission_id).first()
-    if mission and mission.status == 'COMPLETED':
-        raise HTTPException(status_code=400, detail="Cannot delete image for a completed mission")
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found for this image")
+    if mission and mission.status != 'IN_FLIGHT':
+        raise HTTPException(
+            status_code=400,
+            detail="Image deletion is allowed only while mission status is IN_FLIGHT",
+        )
 
     # Attempt to delete storage object (best-effort)
     try:
         storage_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{img.storage_path}"
         headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
-        with httpx.Client() as client:
-            resp = client.delete(storage_url, headers=headers)
-            # ignore non-200 responses; continue to delete DB record
+        request = Request(storage_url, headers=headers, method="DELETE")
+        with urlopen(request, timeout=15):
+            pass
     except Exception:
         pass
 

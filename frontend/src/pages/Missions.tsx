@@ -77,8 +77,15 @@ export default function Missions() {
     });
   }, [missions, statusFilter, siteFilter, sites]);
 
+  const canUploadForMission = (mission: Mission) =>
+    canUploadImages && (mission.status === 'APPROVED' || mission.status === 'IN_FLIGHT');
+
   const handleApprove = (mission: Mission) => {
     approveMutation.mutate(mission.id);
+  };
+
+  const handleReject = (mission: Mission) => {
+    updateStatusMutation.mutate({ missionId: mission.id, status: 'CANCELLED' });
   };
 
   const handleStartFlight = (mission: Mission) => {
@@ -180,15 +187,26 @@ export default function Missions() {
                         <div className="flex justify-end gap-1">
                           {/* Approve button - only for PENDING_APPROVAL and drone_team/admin */}
                           {mission.status === 'PENDING_APPROVAL' && canApprove && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Approve Mission"
-                              onClick={() => handleApprove(mission)}
-                              disabled={approveMutation.isPending}
-                            >
-                              <ThumbsUp className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Approve Mission"
+                                onClick={() => handleApprove(mission)}
+                                disabled={approveMutation.isPending || updateStatusMutation.isPending}
+                              >
+                                <ThumbsUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Reject Mission"
+                                onClick={() => handleReject(mission)}
+                                disabled={approveMutation.isPending || updateStatusMutation.isPending}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
 
                           {/* Start Flight button - only for APPROVED and drone_team/admin */}
@@ -204,8 +222,20 @@ export default function Missions() {
                             </Button>
                           )}
 
-                          {/* Complete & Upload button - only for IN_FLIGHT and drone_team/admin */}
-                          {mission.status === 'IN_FLIGHT' && canUploadImages && (
+                          {/* Upload is allowed only after approval and before completion */}
+                          {mission.status === 'APPROVED' && canUploadForMission(mission) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Upload Images"
+                              onClick={() => setUploadMission(mission)}
+                            >
+                              <Upload className="h-4 w-4" />
+                            </Button>
+                          )}
+
+                          {/* Complete & Upload button - only for IN_FLIGHT */}
+                          {mission.status === 'IN_FLIGHT' && canUploadForMission(mission) && (
                             <>
                               <Button
                                 variant="ghost"
@@ -225,18 +255,6 @@ export default function Missions() {
                                 <Upload className="h-4 w-4" />
                               </Button>
                             </>
-                          )}
-
-                          {/* Upload button for COMPLETED missions - drone_team/admin can still add more images */}
-                          {mission.status === 'COMPLETED' && canUploadImages && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Upload Images"
-                              onClick={() => setUploadMission(mission)}
-                            >
-                              <Upload className="h-4 w-4" />
-                            </Button>
                           )}
 
                           {/* View button - everyone */}
@@ -268,6 +286,7 @@ export default function Missions() {
       <MissionDetailDialog
         mission={selectedMission}
         open={!!selectedMission}
+        canDeleteImages={canUploadImages}
         onOpenChange={(open) => !open && setSelectedMission(null)}
       />
 

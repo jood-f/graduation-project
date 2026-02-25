@@ -9,6 +9,7 @@ from app.api.mission import router as mission_router
 from app.api.mission_images import router as mission_images_router
 from app.api.inspection_results import router as inspection_results_router
 from app.api.cv import router as cv_router
+from app.api.admin import router as admin_router
 
 
 app = FastAPI(title="SolarSense API")
@@ -39,6 +40,7 @@ app.include_router(mission_router)
 app.include_router(mission_images_router)
 app.include_router(inspection_results_router)
 app.include_router(cv_router)
+app.include_router(admin_router)
 
 @app.get("/health")
 def health():

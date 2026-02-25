@@ -37,6 +37,8 @@ class DetectionResult(BaseModel):
     confidence: float
     bbox: Optional[Dict[str, Any]] = None
     status: str  # PASS, FAIL, REVIEW
+    model_version: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class AnalysisResponse(BaseModel):

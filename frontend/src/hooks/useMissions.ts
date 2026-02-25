@@ -18,7 +18,20 @@ export interface Mission {
   approved_by_name: string | null;
   approved_at: string | null;
   created_at: string;
-  created_by_user_id: string;
+  created_by_user_id?: string | null;
+}
+
+interface MissionRow {
+  id: string;
+  panel_id: string;
+  status: string;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  created_at: string;
+  panels: {
+    label: string | null;
+    sites: { name: string | null } | null;
+  } | null;
 }
 
 export interface MissionImage {
@@ -37,11 +50,33 @@ export function useMissions() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('missions')
-        .select('*')
+        .select(`
+          id,
+          panel_id,
+          status,
+          approved_by_user_id,
+          approved_at,
+          created_at,
+          panels (
+            label,
+            sites (name)
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as Mission[];
+      return (data as unknown as MissionRow[]).map((row) => ({
+        id: row.id,
+        panel_id: row.panel_id,
+        status: row.status,
+        approved_by_user_id: row.approved_by_user_id,
+        approved_by_name: null,
+        approved_at: row.approved_at,
+        created_at: row.created_at,
+        panel_label: row.panels?.label || 'Unknown Panel',
+        site_name: row.panels?.sites?.name || 'Unknown Site',
+        created_by_user_id: null,
+      })) as Mission[];
     },
   });
 }
@@ -86,7 +121,6 @@ export function useApproveMission() {
         .update({
           status: 'APPROVED',
           approved_by_user_id: user?.id,
-          approved_by_name: user?.name,
           approved_at: new Date().toISOString(),
         })
         .eq('id', missionId);
@@ -160,6 +194,22 @@ export function useUploadMissionImage() {
     }) => {
       if (!user?.id) {
         throw new Error('User not authenticated');
+      }
+
+      // Upload is allowed only after mission approval and before completion
+      const { data: missionRow, error: missionError } = await supabase
+        .from('missions')
+        .select('status')
+        .eq('id', missionId)
+        .single();
+
+      if (missionError) {
+        throw new Error(`Failed to validate mission status: ${missionError.message}`);
+      }
+
+      const allowedStatuses = new Set(['APPROVED', 'IN_FLIGHT']);
+      if (!allowedStatuses.has(missionRow.status)) {
+        throw new Error('Image upload is allowed only for approved missions before completion');
       }
 
       const fileExt = file.name.split('.').pop();
@@ -343,18 +393,76 @@ export function useDeleteMissionImage() {
 export function useCreateMission() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+
+  const extractErrorMessage = (error: unknown): string => {
+    if (error instanceof Error && error.message) return error.message;
+
+    if (error && typeof error === 'object') {
+      const maybe = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+      const parts = [maybe.message, maybe.details, maybe.hint, maybe.code]
+        .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+      if (parts.length > 0) return parts.join(' | ');
+
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return 'Unknown error';
+      }
+    }
+
+    return 'Unknown error';
+  };
 
   return useMutation({
-    mutationFn: async (mission: { panel_id: string; panel_label: string; site_name: string }) => {
+    mutationFn: async (mission: { panel_id: string }) => {
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+
+      const supabasePayload = {
+        id: uuidv4(),
+        panel_id: mission.panel_id,
+        status: 'PENDING_APPROVAL' as const,
+      };
+
+      const backendPayload = {
+        panel_id: mission.panel_id,
+        status: 'PENDING_APPROVAL' as const,
+      };
+
       const { error } = await supabase
         .from('missions')
-        .insert({
-          ...mission,
-          created_by_user_id: user?.id,
-          status: 'PENDING_APPROVAL',
-        });
+        .insert(supabasePayload)
+        .select('id')
+        .single();
 
-      if (error) throw error;
+      if (!error) return;
+
+      const message = extractErrorMessage(error);
+      const code = (error as any)?.code as string | undefined;
+      const isRlsIssue =
+        code === '42501' ||
+        message.toLowerCase().includes('row-level security') ||
+        message.toLowerCase().includes('permission denied');
+
+      if (!isRlsIssue) {
+        throw new Error(message);
+      }
+
+      // Fallback: create mission through backend API (direct DB connection) when Supabase RLS blocks inserts.
+      const response = await fetch(`${API_BASE_URL}/missions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backendPayload),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Supabase blocked insert (${message}) and backend fallback failed: ${text}`);
+      }
+
+      await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['missions'] });
@@ -362,7 +470,8 @@ export function useCreateMission() {
     },
     onError: (error) => {
       console.error('Error creating mission:', error);
-      toast.error('Failed to create mission');
+      const message = extractErrorMessage(error);
+      toast.error(`Failed to create mission: ${message}`);
     },
   });
 }

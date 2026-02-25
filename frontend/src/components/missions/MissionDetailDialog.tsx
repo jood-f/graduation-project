@@ -20,10 +20,11 @@ const statusStyles: Record<string, string> = {
 interface MissionDetailDialogProps {
   mission: Mission | null;
   open: boolean;
+  canDeleteImages: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDetailDialogProps) {
+export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChange }: MissionDetailDialogProps) {
   const { data: images, isLoading: imagesLoading } = useMissionImages(mission?.id ?? null);
   const deleteMut = useDeleteMissionImage();
 
@@ -93,7 +94,7 @@ export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDeta
                         className="rounded-lg object-cover h-40 w-full cursor-pointer hover:opacity-90 transition-opacity"
                         onClick={() => window.open(img.url, '_blank')}
                       />
-                      {mission.status !== 'COMPLETED' && (
+                      {canDeleteImages && mission.status === 'IN_FLIGHT' && (
                         <button
                           className="absolute top-2 right-2 bg-white/80 rounded p-1 text-danger hover:opacity-90 disabled:opacity-60"
                           onClick={(e) => {
@@ -117,7 +118,11 @@ export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDeta
             </TabsContent>
 
             <TabsContent value="analysis" className="mt-4">
-              <DefectAnalysis missionId={mission.id} />
+              <DefectAnalysis
+                missionId={mission.id}
+                imageCount={imagesLoading ? -1 : images?.length || 0}
+                missionImages={images || []}
+              />
             </TabsContent>
           </Tabs>
         </div>

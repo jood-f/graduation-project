@@ -1,23 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { mockPanels, mockAnomalies, mockTelemetry, mockSites } from '@/data/mockData';
-import type { Panel, PanelStatus } from '@/types';
-import { format } from 'date-fns';
-import { MapPin, Calendar, Activity, AlertTriangle, Zap, Filter } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { usePanels, type Panel } from '@/hooks/usePanels';
+import { useSites } from '@/hooks/useSites';
+import { useFaults } from '@/hooks/useFaults';
+import { useMLAnomalies } from '@/hooks/useMLAnomalies';
+import { supabase } from '@/integrations/supabase/client';
+import { Activity, AlertTriangle, MapPin, Zap, Filter } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   OK: 'bg-primary hover:bg-primary/80',
@@ -31,39 +24,112 @@ const statusBadgeVariants: Record<string, 'default' | 'secondary' | 'destructive
   FAULT: 'destructive',
 };
 
+type PanelAnomaly = {
+  id: string;
+  source: 'ML' | 'CV';
+  type: string;
+  severity: 'LOW' | 'MED' | 'HIGH';
+  message: string;
+  detected_at: string;
+};
+
 export function PanelHeatmap() {
   const [selectedPanel, setSelectedPanel] = useState<Panel | null>(null);
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const { data: panels, isLoading: panelsLoading } = usePanels();
+  const { data: sites } = useSites();
+  const { data: faults } = useFaults();
+  const { data: mlAnomalies } = useMLAnomalies();
+
   const filteredPanels = useMemo(() => {
-    return mockPanels.filter((panel) => {
-      const matchesSite = siteFilter === 'all' || panel.siteId === siteFilter;
+    return (panels || []).filter((panel) => {
+      const matchesSite = siteFilter === 'all' || panel.site_id === siteFilter;
       const matchesStatus = statusFilter === 'all' || panel.status === statusFilter;
       return matchesSite && matchesStatus;
     });
-  }, [siteFilter, statusFilter]);
+  }, [panels, siteFilter, statusFilter]);
 
-  const getPanelAnomalies = (panelId: string) => {
-    return mockAnomalies.filter(a => a.panelId === panelId && a.status === 'OPEN');
-  };
-
-  const getLatestTelemetry = (panelId: string) => {
-    const telemetry = mockTelemetry[panelId];
-    if (!telemetry || telemetry.length === 0) return null;
-    return telemetry[telemetry.length - 1];
-  };
-
-  // Group filtered panels by site
   const panelsBySite = useMemo(() => {
     return filteredPanels.reduce((acc, panel) => {
-      if (!acc[panel.siteName]) {
-        acc[panel.siteName] = [];
+      const siteName = panel.site_name || sites?.find((s) => s.id === panel.site_id)?.name || 'Unknown Site';
+      if (!acc[siteName]) {
+        acc[siteName] = [];
       }
-      acc[panel.siteName].push(panel);
+      acc[siteName].push(panel);
       return acc;
     }, {} as Record<string, Panel[]>);
-  }, [filteredPanels]);
+  }, [filteredPanels, sites]);
+
+  const panelAnomalies = useMemo(() => {
+    const map = new Map<string, PanelAnomaly[]>();
+
+    (faults || []).forEach((fault) => {
+      const severity: 'LOW' | 'MED' | 'HIGH' =
+        fault.confidence >= 0.85 ? 'HIGH' : fault.confidence >= 0.7 ? 'MED' : 'LOW';
+
+      const item: PanelAnomaly = {
+        id: `cv-${fault.id}`,
+        source: 'CV',
+        type: fault.fault_type,
+        severity,
+        message: `CV detected ${fault.fault_type} (${Math.round(fault.confidence * 100)}% confidence)`,
+        detected_at: fault.detected_at,
+      };
+
+      const existing = map.get(fault.panel_id) || [];
+      existing.push(item);
+      map.set(fault.panel_id, existing);
+    });
+
+    (mlAnomalies || []).forEach((anomaly) => {
+      const item: PanelAnomaly = {
+        id: `ml-${anomaly.id}`,
+        source: 'ML',
+        type: anomaly.anomaly_type,
+        severity: anomaly.severity,
+        message:
+          anomaly.error != null
+            ? `ML error ${anomaly.error.toFixed(2)}W (${(anomaly.error_percent ?? 0).toFixed(2)}%)`
+            : 'ML anomaly detected',
+        detected_at: anomaly.analyzed_at || anomaly.timestamp,
+      };
+
+      const existing = map.get(anomaly.panel_id) || [];
+      existing.push(item);
+      map.set(anomaly.panel_id, existing);
+    });
+
+    map.forEach((list, panelId) => {
+      list.sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime());
+      map.set(panelId, list);
+    });
+
+    return map;
+  }, [faults, mlAnomalies]);
+
+  const { data: latestTelemetry, isLoading: telemetryLoading } = useQuery({
+    queryKey: ['panel-latest-telemetry', selectedPanel?.id],
+    enabled: !!selectedPanel?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('telemetry')
+        .select('voltage,current,temperature,timestamp')
+        .eq('panel_id', selectedPanel!.id)
+        .order('timestamp', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      return {
+        ...data,
+        power: data.voltage * data.current,
+      };
+    },
+  });
 
   return (
     <>
@@ -82,7 +148,7 @@ export function PanelHeatmap() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Sites</SelectItem>
-                  {mockSites.map((site) => (
+                  {sites?.map((site) => (
                     <SelectItem key={site.id} value={site.id}>
                       {site.name}
                     </SelectItem>
@@ -104,37 +170,48 @@ export function PanelHeatmap() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            {Object.entries(panelsBySite).map(([siteName, panels]) => (
-              <div key={siteName}>
-                <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  {siteName}
-                </h4>
-                <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
-                  {panels.map((panel) => (
-                    <button
-                      key={panel.id}
-                      onClick={() => setSelectedPanel(panel)}
-                      className={`
-                        aspect-square rounded-md transition-all duration-200
-                        ${statusColors[panel.status]}
-                        flex items-center justify-center text-xs font-medium
-                        text-primary-foreground shadow-sm
-                        hover:scale-110 hover:shadow-md
-                        focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
-                      `}
-                      title={`${panel.label} - ${panel.status}`}
-                    >
-                      {panel.label.split('-')[1]}
-                    </button>
-                  ))}
+          {panelsLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <div className="space-y-6">
+              <p className="text-sm text-muted-foreground">Showing {filteredPanels.length} active panels from database.</p>
+              {Object.entries(panelsBySite).map(([siteName, sitePanels]) => (
+                <div key={siteName}>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    {siteName}
+                  </h4>
+                  <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
+                    {sitePanels.map((panel) => {
+                      const shortLabel = panel.label?.split('-').pop() || panel.label || panel.id.slice(0, 4);
+                      return (
+                        <button
+                          key={panel.id}
+                          onClick={() => setSelectedPanel(panel)}
+                          className={`
+                            aspect-square rounded-md transition-all duration-200
+                            ${statusColors[panel.status]}
+                            flex items-center justify-center text-xs font-medium
+                            text-primary-foreground shadow-sm
+                            hover:scale-110 hover:shadow-md
+                            focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
+                          `}
+                          title={`${panel.label || panel.id} - ${panel.status}`}
+                          aria-label={`Open panel ${panel.label || panel.id} details`}
+                        >
+                          {shortLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+              {filteredPanels.length === 0 && (
+                <p className="text-sm text-muted-foreground">No panels match current filters.</p>
+              )}
+            </div>
+          )}
 
-          {/* Legend */}
           <div className="mt-6 flex items-center gap-4 text-sm">
             <span className="text-muted-foreground">Status:</span>
             <div className="flex items-center gap-2">
@@ -153,114 +230,81 @@ export function PanelHeatmap() {
         </CardContent>
       </Card>
 
-      {/* Panel Detail Dialog */}
       <Dialog open={!!selectedPanel} onOpenChange={() => setSelectedPanel(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              Panel {selectedPanel?.label}
-              {selectedPanel && (
-                <Badge variant={statusBadgeVariants[selectedPanel.status]}>
-                  {selectedPanel.status}
-                </Badge>
-              )}
+              Panel {selectedPanel?.label || selectedPanel?.id}
+              {selectedPanel && <Badge variant={statusBadgeVariants[selectedPanel.status]}>{selectedPanel.status}</Badge>}
             </DialogTitle>
           </DialogHeader>
 
           {selectedPanel && (
             <div className="space-y-4">
-              {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="space-y-1">
-                  <p className="text-muted-foreground flex items-center gap-1">
-                    <MapPin className="h-3 w-3" /> Site
-                  </p>
-                  <p className="font-medium">{selectedPanel.siteName}</p>
+                  <p className="text-muted-foreground">Panel ID</p>
+                  <p className="font-mono text-xs break-all">{selectedPanel.id}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-muted-foreground flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> Installed
-                  </p>
-                  <p className="font-medium">
-                    {format(new Date(selectedPanel.installedAt), 'MMM d, yyyy')}
-                  </p>
+                  <p className="text-muted-foreground">Site</p>
+                  <p className="font-medium">{selectedPanel.site_name || 'Unknown Site'}</p>
                 </div>
               </div>
 
               <div className="text-sm space-y-1">
                 <p className="text-muted-foreground">Serial Number</p>
-                <p className="font-mono text-xs bg-muted px-2 py-1 rounded">
-                  {selectedPanel.serialNumber}
-                </p>
+                <p className="font-mono text-xs bg-muted px-2 py-1 rounded">{selectedPanel.serial_number || 'N/A'}</p>
               </div>
 
-              {/* Latest Telemetry */}
-              {(() => {
-                const telemetry = getLatestTelemetry(selectedPanel.id);
-                if (!telemetry) return null;
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-accent" />
+                  Latest Telemetry
+                </h4>
 
-                return (
-                  <div className="border-t pt-4">
-                    <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-accent" />
-                      Latest Readings
-                    </h4>
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-muted/50 rounded-lg p-2">
-                        <p className="text-lg font-semibold text-primary">
-                          {telemetry.acPower.toFixed(0)}W
-                        </p>
-                        <p className="text-xs text-muted-foreground">AC Power</p>
-                      </div>
-                      <div className="bg-muted/50 rounded-lg p-2">
-                        <p className="text-lg font-semibold text-primary">
-                          {telemetry.voltage.toFixed(1)}V
-                        </p>
-                        <p className="text-xs text-muted-foreground">Voltage</p>
-                      </div>
-                      <div className="bg-muted/50 rounded-lg p-2">
-                        <p className="text-lg font-semibold text-primary">
-                          {telemetry.temperature.toFixed(1)}°C
-                        </p>
-                        <p className="text-xs text-muted-foreground">Temp</p>
-                      </div>
+                {telemetryLoading ? (
+                  <Skeleton className="h-16 w-full" />
+                ) : latestTelemetry ? (
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-muted/50 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-primary">{latestTelemetry.power.toFixed(2)}W</p>
+                      <p className="text-xs text-muted-foreground">Power</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-primary">{latestTelemetry.voltage.toFixed(2)}V</p>
+                      <p className="text-xs text-muted-foreground">Voltage</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-2">
+                      <p className="text-lg font-semibold text-primary">{latestTelemetry.temperature.toFixed(2)}C</p>
+                      <p className="text-xs text-muted-foreground">Temp</p>
                     </div>
                   </div>
-                );
-              })()}
+                ) : (
+                  <p className="text-xs text-muted-foreground">No telemetry available for this panel.</p>
+                )}
+              </div>
 
-              {/* Open Anomalies */}
-              {(() => {
-                const anomalies = getPanelAnomalies(selectedPanel.id);
-                if (anomalies.length === 0) return null;
-
-                return (
-                  <div className="border-t pt-4">
-                    <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-warning" />
-                      Open Anomalies ({anomalies.length})
-                    </h4>
-                    <div className="space-y-2">
-                      {anomalies.map((anomaly) => (
-                        <div
-                          key={anomaly.id}
-                          className="bg-warning/10 border border-warning/20 rounded-lg p-2 text-sm"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{anomaly.type.replace('_', ' ')}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {anomaly.severity}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {anomaly.message}
-                          </p>
-                        </div>
-                      ))}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warning" />
+                  Latest Anomalies
+                </h4>
+                <div className="space-y-2 max-h-40 overflow-auto">
+                  {(panelAnomalies.get(selectedPanel.id) || []).slice(0, 5).map((anomaly) => (
+                    <div key={anomaly.id} className="bg-warning/10 border border-warning/20 rounded-lg p-2 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{anomaly.type}</span>
+                        <Badge variant="outline" className="text-xs">{anomaly.source} - {anomaly.severity}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{anomaly.message}</p>
                     </div>
-                  </div>
-                );
-              })()}
+                  ))}
+                  {(panelAnomalies.get(selectedPanel.id) || []).length === 0 && (
+                    <p className="text-xs text-muted-foreground">No anomalies recorded for this panel.</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
