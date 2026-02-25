@@ -54,6 +54,20 @@ interface CombinedAnomaly {
   error_percent: number | null;
 }
 
+function formatPower(value: number | null): string {
+  if (value == null) return '-';
+  return `${Math.abs(value) < 1 ? value.toFixed(4) : value.toFixed(2)} W`;
+}
+
+function formatError(error: number | null, errorPercent: number | null): string {
+  if (error == null) return '-';
+  const errorText = `${Math.abs(error) < 1 ? error.toFixed(4) : error.toFixed(2)} W`;
+  if (errorPercent == null) {
+    return `${errorText} (N/A at low actual power)`;
+  }
+  return `${errorText} (${errorPercent.toFixed(2)}%)`;
+}
+
 function getCvSeverity(confidence: number): Severity {
   if (confidence >= 0.85) return 'HIGH';
   if (confidence >= 0.7) return 'MED';
@@ -234,22 +248,16 @@ export default function Anomalies() {
                         <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
                       </TableCell>
                       <TableCell>
-                        {item.model === 'ML' && item.actual_power != null
-                          ? `${item.actual_power.toFixed(2)} W`
-                          : '-'}
+                        {item.model === 'ML' ? formatPower(item.actual_power) : '-'}
                       </TableCell>
                       <TableCell>
-                        {item.model === 'ML' && item.predicted_power != null
-                          ? `${item.predicted_power.toFixed(2)} W`
-                          : '-'}
+                        {item.model === 'ML' ? formatPower(item.predicted_power) : '-'}
                       </TableCell>
                       <TableCell>
                         {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}%` : '-'}
                       </TableCell>
                       <TableCell>
-                        {item.error != null
-                          ? `${item.error.toFixed(2)} W (${(item.error_percent ?? 0).toFixed(2)}%)`
-                          : '-'}
+                        {formatError(item.error, item.error_percent)}
                       </TableCell>
                       <TableCell>
                         <Badge className={cn(severityStyles[severity])}>{severity}</Badge>

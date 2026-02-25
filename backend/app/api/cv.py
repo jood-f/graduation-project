@@ -12,6 +12,7 @@ def cv_status():
     return {
         "available": service.is_available(),
         "mode": getattr(service, "detection_mode", "none"),
+        "allow_heuristic_fallback": getattr(service, "allow_heuristic_fallback", False),
         "yolo_available": service.is_yolo_available() if hasattr(service, "is_yolo_available") else False,
         "reason": getattr(service, "unavailable_reason", None),
         "model_path": service.model_path,

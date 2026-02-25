@@ -84,14 +84,21 @@ export function PanelHeatmap() {
     });
 
     (mlAnomalies || []).forEach((anomaly) => {
+      const errorText = anomaly.error != null
+        ? `${Math.abs(anomaly.error) < 1 ? anomaly.error.toFixed(4) : anomaly.error.toFixed(2)}W`
+        : null;
+      const errorPercentText = anomaly.error_percent != null
+        ? `${anomaly.error_percent.toFixed(2)}%`
+        : 'N/A at low actual power';
+
       const item: PanelAnomaly = {
         id: `ml-${anomaly.id}`,
         source: 'ML',
         type: anomaly.anomaly_type,
         severity: anomaly.severity,
         message:
-          anomaly.error != null
-            ? `ML error ${anomaly.error.toFixed(2)}W (${(anomaly.error_percent ?? 0).toFixed(2)}%)`
+          errorText
+            ? `ML error ${errorText} (${errorPercentText})`
             : 'ML anomaly detected',
         detected_at: anomaly.analyzed_at || anomaly.timestamp,
       };

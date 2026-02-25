@@ -282,6 +282,9 @@ def predict_power(
         )
 
     persisted_rows = _persist_prediction_metrics(db, panel_id, predictions)
+    error_percent_values = [
+        p["error_percent"] for p in predictions if p.get("error_percent") is not None
+    ]
 
     return {
         "panel_id": str(panel_id),
@@ -293,8 +296,10 @@ def predict_power(
         "summary": {
             "avg_error": round(sum(p["error"] for p in predictions) / len(predictions), 2),
             "max_error": round(max(p["error"] for p in predictions), 2),
-            "avg_error_percent": round(
-                sum(p["error_percent"] for p in predictions) / len(predictions), 2
+            "avg_error_percent": (
+                round(sum(error_percent_values) / len(error_percent_values), 2)
+                if error_percent_values
+                else None
             ),
         },
     }

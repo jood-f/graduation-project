@@ -1,6 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.db.deps import get_db
 from app.models.inspection_result import InspectionResult, InspectionStatus as InspectionModelStatus
@@ -79,6 +80,12 @@ def list_cv_anomalies(
         .outerjoin(Panel, Mission.panel_id == Panel.id)
         .outerjoin(Site, Panel.site_id == Site.id)
         .filter(InspectionResult.status == InspectionModelStatus.FAIL)
+        .filter(
+            or_(
+                InspectionResult.model_version.is_(None),
+                ~InspectionResult.model_version.ilike("heuristic%")
+            )
+        )
     )
 
     if mission_id is not None:

@@ -62,6 +62,9 @@ class CVModelService:
         self.model_path = model_path
         self.model_version = "yolov8-solar-v1"
         self.unavailable_reason: Optional[str] = None
+        self.allow_heuristic_fallback = str(
+            os.getenv("CV_ALLOW_HEURISTIC_FALLBACK", "false")
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.detection_mode: str = "none"  # yolo | heuristic | none
         self._load_model()
 
@@ -93,13 +96,16 @@ class CVModelService:
             self.unavailable_reason = "YOLO weights file not found (set CV_MODEL_PATH or add best.pt)."
             logger.warning(self.unavailable_reason)
             self.model = None
-            if cv2 is not None and np is not None:
+            if self.allow_heuristic_fallback and cv2 is not None and np is not None:
                 self.model_version = "heuristic-cv-v2"
                 self.detection_mode = "heuristic"
             else:
                 self.model_version = "unavailable"
                 self.detection_mode = "none"
-                self.unavailable_reason += " OpenCV fallback is unavailable (cv2/numpy missing)."
+                if not self.allow_heuristic_fallback:
+                    self.unavailable_reason += " Heuristic fallback is disabled."
+                else:
+                    self.unavailable_reason += " OpenCV fallback is unavailable (cv2/numpy missing)."
             return
 
         try:
@@ -113,20 +119,25 @@ class CVModelService:
             logger.error(f"Failed to load CV model: {e}")
             self.model = None
             self.unavailable_reason = f"YOLO load failed: {e}"
-            if cv2 is not None and np is not None:
+            if self.allow_heuristic_fallback and cv2 is not None and np is not None:
                 self.model_version = "heuristic-cv-v2"
                 self.detection_mode = "heuristic"
             else:
                 self.model_version = "unavailable"
                 self.detection_mode = "none"
-                self.unavailable_reason += " OpenCV fallback is unavailable (cv2/numpy missing)."
+                if not self.allow_heuristic_fallback:
+                    self.unavailable_reason += " Heuristic fallback is disabled."
+                else:
+                    self.unavailable_reason += " OpenCV fallback is unavailable (cv2/numpy missing)."
 
     def is_available(self) -> bool:
         """
         Check if any detection mode is available.
         YOLO is preferred; OpenCV heuristic is fallback.
         """
-        return self.model is not None or self.detection_mode == "heuristic"
+        return self.model is not None or (
+            self.allow_heuristic_fallback and self.detection_mode == "heuristic"
+        )
 
     def is_yolo_available(self) -> bool:
         return self.model is not None
@@ -339,7 +350,9 @@ class CVModelService:
             raise FileNotFoundError(f"Image not found: {image_path}")
 
         if not self.is_yolo_available():
-            return self._heuristic_detect(image_path, confidence_threshold)
+            if self.allow_heuristic_fallback:
+                return self._heuristic_detect(image_path, confidence_threshold)
+            raise RuntimeError("YOLO detector unavailable and heuristic fallback is disabled")
 
         try:
             results = self.model.predict(

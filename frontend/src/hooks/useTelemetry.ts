@@ -24,7 +24,7 @@ export interface TelemetryPrediction {
   actual_power: number;
   predicted_power: number;
   error: number;
-  error_percent: number;
+  error_percent: number | null;
   voltage: number;
   current: number;
   temperature: number;
@@ -37,7 +37,7 @@ export interface PredictionResult {
   summary: {
     avg_error: number;
     max_error: number;
-    avg_error_percent: number;
+    avg_error_percent: number | null;
   };
 }
 
@@ -45,7 +45,7 @@ export interface Anomaly {
   timestamp: string;
   severity: 'high' | 'medium';
   error: number;
-  error_percent: number;
+  error_percent: number | null;
   actual_power: number;
   predicted_power: number;
   details: {

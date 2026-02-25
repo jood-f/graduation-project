@@ -14,6 +14,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Relative error is not meaningful when actual power is near zero.
+MIN_ACTUAL_POWER_FOR_PERCENT = 1.0
+
 class TelemetryModelService:
     """Service for loading and using the trained telemetry prediction model"""
     
@@ -167,16 +170,19 @@ class TelemetryModelService:
         for i, pred in enumerate(predictions):
             idx = i + self.sequence_length
             actual_power = telemetry_data[idx]['voltage'] * telemetry_data[idx]['current']
-            predicted_power = float(pred[0])
+            predicted_power = max(float(pred[0]), 0.0)
             error = abs(actual_power - predicted_power)
-            error_percent = (error / (actual_power + 1e-8)) * 100
+            if abs(actual_power) < MIN_ACTUAL_POWER_FOR_PERCENT:
+                error_percent = None
+            else:
+                error_percent = (error / abs(actual_power)) * 100
             
             results.append({
                 'timestamp': telemetry_data[idx].get('timestamp'),
                 'actual_power': round(actual_power, 2),
                 'predicted_power': round(predicted_power, 2),
                 'error': round(error, 2),
-                'error_percent': round(error_percent, 2),
+                'error_percent': round(error_percent, 2) if error_percent is not None else None,
                 'voltage': telemetry_data[idx]['voltage'],
                 'current': telemetry_data[idx]['current'],
                 'temperature': telemetry_data[idx]['temperature']
