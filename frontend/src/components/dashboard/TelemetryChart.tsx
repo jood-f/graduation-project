@@ -5,7 +5,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useLatestTelemetry } from '@/hooks/useTelemetry';
 
 export function TelemetryChart() {
-  const { data: telemetry, isLoading, error } = useLatestTelemetry(12);
+  const { data: telemetryResult, isLoading, error } = useLatestTelemetry(12);
+  const telemetry = telemetryResult?.telemetry ?? [];
+  const isFallback = telemetryResult?.isFallback ?? false;
+  const anchorTimestamp = telemetryResult?.anchorTimestamp;
+  const chartTitle = isFallback ? 'Power Output (Latest Available 12 Hours)' : 'Power Output (Last 12 Hours)';
 
   const chartData = useMemo(() => {
     if (!telemetry || telemetry.length === 0) return [];
@@ -35,7 +39,7 @@ export function TelemetryChart() {
     return (
       <Card className="col-span-2">
         <CardHeader>
-          <CardTitle>Power Output (Last 12 Hours)</CardTitle>
+          <CardTitle>{chartTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-[300px] w-full" />
@@ -48,7 +52,7 @@ export function TelemetryChart() {
     return (
       <Card className="col-span-2">
         <CardHeader>
-          <CardTitle>Power Output (Last 12 Hours)</CardTitle>
+          <CardTitle>{chartTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px] flex items-center justify-center text-muted-foreground">
@@ -62,7 +66,15 @@ export function TelemetryChart() {
   return (
     <Card className="col-span-2">
       <CardHeader>
-        <CardTitle>Power Output (Last 12 Hours)</CardTitle>
+        <div className="space-y-1">
+          <CardTitle>{chartTitle}</CardTitle>
+          {isFallback && anchorTimestamp && (
+            <p className="text-xs text-muted-foreground">
+              No data in the current 12-hour window. Showing latest window ending{' '}
+              {new Date(anchorTimestamp).toLocaleString()}.
+            </p>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="h-[300px]">

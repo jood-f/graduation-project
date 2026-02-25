@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel
+from typing import Optional
 
 
 class TelemetryCreate(BaseModel):
@@ -17,6 +18,12 @@ class TelemetryOut(BaseModel):
     current: float
     temperature: float
     timestamp: datetime
+    predicted_power: Optional[float] = None
+    prediction_error: Optional[float] = None
+    error_percent: Optional[float] = None
+    is_anomaly: Optional[bool] = None
+    anomaly_severity: Optional[str] = None
+    analyzed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

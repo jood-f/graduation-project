@@ -21,4 +21,8 @@ ml/*.png
 *.pt
 CV/YOLO_RESULTS/
 runs/detect/
-
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

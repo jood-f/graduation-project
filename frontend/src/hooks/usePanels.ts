@@ -7,6 +7,7 @@ export interface Panel {
   label: string | null;
   serial_number: string | null;
   status: 'OK' | 'WARNING' | 'FAULT';
+  deleted_at?: string | null;
   site_name?: string;
 }
 
@@ -24,6 +25,7 @@ export function usePanels() {
           *,
           sites (name)
         `)
+        .is('deleted_at', null)
         .order('label');
       
       if (error) throw error;
@@ -43,7 +45,8 @@ export function usePanelStats() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('panels')
-        .select('status');
+        .select('status')
+        .is('deleted_at', null);
       
       if (error) throw error;
       

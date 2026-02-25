@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,13 +11,24 @@ import { Navigate } from 'react-router-dom';
 import { Shield, Users } from 'lucide-react';
 import type { UserRole } from '@/types';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+
 interface UserWithRole {
-  id: string;
   user_id: string;
   name: string;
   email: string;
   role: UserRole;
-  created_at: string;
+  created_at: string | null;
+}
+
+interface AdminUsersResponse {
+  users: UserWithRole[];
+  counts: {
+    total_users: number;
+    admins: number;
+    operators: number;
+    drone_team: number;
+  };
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -43,49 +52,59 @@ export default function Admin() {
     return <Navigate to="/" replace />;
   }
 
-  const { data: users, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['admin-users'],
-    queryFn: async () => {
-      // Fetch all profiles with their roles
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+    queryFn: async (): Promise<AdminUsersResponse> => {
+      if (!currentUser?.id) {
+        throw new Error('Current user not found');
+      }
 
-      if (profilesError) throw profilesError;
-
-      // Fetch all roles
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('*');
-
-      if (rolesError) throw rolesError;
-
-      // Get emails from auth (we'll use the profile name as fallback)
-      const usersWithRoles: UserWithRole[] = profiles.map(profile => {
-        const userRole = roles.find(r => r.user_id === profile.user_id);
-        return {
-          id: profile.id,
-          user_id: profile.user_id,
-          name: profile.name,
-          email: profile.name, // We don't have direct access to auth.users email
-          role: (userRole?.role as UserRole) || 'operator',
-          created_at: profile.created_at,
-        };
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.id,
+        },
       });
 
-      return usersWithRoles;
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Failed to fetch users');
+      }
+
+      return response.json();
     },
+    enabled: !!currentUser?.id,
   });
+
+  const users = data?.users || [];
+  const counts = data?.counts || {
+    total_users: 0,
+    admins: 0,
+    operators: 0,
+    drone_team: 0,
+  };
 
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, newRole }: { userId: string; newRole: UserRole }) => {
-      const { error } = await supabase
-        .from('user_roles')
-        .update({ role: newRole })
-        .eq('user_id', userId);
+      if (!currentUser?.id) {
+        throw new Error('Current user not found');
+      }
 
-      if (error) throw error;
+      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.id,
+        },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Failed to update role');
+      }
+
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -117,7 +136,7 @@ export default function Admin() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{users?.length || 0}</div>
+              <div className="text-2xl font-bold">{counts.total_users}</div>
             </CardContent>
           </Card>
           <Card>
@@ -127,7 +146,7 @@ export default function Admin() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {users?.filter(u => u.role === 'admin').length || 0}
+                {counts.admins}
               </div>
             </CardContent>
           </Card>
@@ -138,7 +157,7 @@ export default function Admin() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {users?.filter(u => u.role === 'operator').length || 0}
+                {counts.operators}
               </div>
             </CardContent>
           </Card>
@@ -159,19 +178,22 @@ export default function Admin() {
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
+            ) : error ? (
+              <p className="text-sm text-destructive">Failed to load users: {(error as Error).message}</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Current Role</TableHead>
                     <TableHead>Member Since</TableHead>
                     <TableHead className="text-right">Change Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users?.map((user) => (
-                    <TableRow key={user.id}>
+                  {users.map((user) => (
+                    <TableRow key={user.user_id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
@@ -183,13 +205,14 @@ export default function Admin() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell className="text-muted-foreground">{user.email || 'N/A'}</TableCell>
                       <TableCell>
                         <Badge className={roleColors[user.role]}>
                           {roleLabels[user.role]}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {new Date(user.created_at).toLocaleDateString()}
+                        {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
                         <Select
@@ -209,9 +232,9 @@ export default function Admin() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {users?.length === 0 && (
+                  {users.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                         No users found
                       </TableCell>
                     </TableRow>

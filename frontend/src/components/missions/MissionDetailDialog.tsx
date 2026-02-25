@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useMissionImages, type Mission } from '@/hooks/useMissions';
+import { useMissionImages, useDeleteMissionImage, type Mission } from '@/hooks/useMissions';
 import { DefectAnalysis } from '@/components/missions/DefectAnalysis';
 import { cn } from '@/lib/utils';
 import { Image as ImageIcon, ScanEye } from 'lucide-react';
@@ -20,11 +20,13 @@ const statusStyles: Record<string, string> = {
 interface MissionDetailDialogProps {
   mission: Mission | null;
   open: boolean;
+  canDeleteImages: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDetailDialogProps) {
+export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChange }: MissionDetailDialogProps) {
   const { data: images, isLoading: imagesLoading } = useMissionImages(mission?.id ?? null);
+  const deleteMut = useDeleteMissionImage();
 
   if (!mission) return null;
 
@@ -85,13 +87,27 @@ export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDeta
               ) : images && images.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4">
                   {images.map((img) => (
-                    <img
-                      key={img.id}
-                      src={img.url}
-                      alt="Drone capture"
-                      className="rounded-lg object-cover h-40 w-full cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => window.open(img.url, '_blank')}
-                    />
+                    <div key={img.id} className="relative">
+                      <img
+                        src={img.url}
+                        alt="Drone capture"
+                        className="rounded-lg object-cover h-40 w-full cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => window.open(img.url, '_blank')}
+                      />
+                      {canDeleteImages && mission.status === 'IN_FLIGHT' && (
+                        <button
+                          className="absolute top-2 right-2 bg-white/80 rounded p-1 text-danger hover:opacity-90 disabled:opacity-60"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!confirm('Delete this image?')) return;
+                            deleteMut.mutate({ imageId: img.id, missionId: mission.id });
+                          }}
+                          disabled={deleteMut.isLoading}
+                        >
+                          {deleteMut.isLoading ? 'Deleting...' : 'Delete'}
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -102,7 +118,11 @@ export function MissionDetailDialog({ mission, open, onOpenChange }: MissionDeta
             </TabsContent>
 
             <TabsContent value="analysis" className="mt-4">
-              <DefectAnalysis missionId={mission.id} />
+              <DefectAnalysis
+                missionId={mission.id}
+                imageCount={imagesLoading ? -1 : images?.length || 0}
+                missionImages={images || []}
+              />
             </TabsContent>
           </Tabs>
         </div>

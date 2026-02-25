@@ -12,6 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
+import joblib
 from tensorflow.keras import models, layers
 import sys
 
@@ -112,6 +113,8 @@ def main():
                        help='Target variable to predict')
     parser.add_argument('--csv', type=str, default=None, 
                        help='Use CSV file instead of database')
+    parser.add_argument('--save-scalers-only', action='store_true', 
+                       help='Fit and save feature/target scalers without training the model')
     args = parser.parse_args()
     
     print("="*60)
@@ -146,6 +149,17 @@ def main():
     print(f"Target: {target_col}")
     print(f"\nData statistics:")
     print(df[feature_cols + [target_col]].describe())
+
+    if args.save_scalers_only:
+        # Fit and save feature + target scalers (no model training)
+        scaler.fit(df[feature_cols].to_numpy())
+        scaler_y = StandardScaler()
+        scaler_y.fit(df[target_col].to_numpy().reshape(-1, 1))
+        scalers_dir = Path(__file__).parent
+        joblib.dump(scaler, scalers_dir / f"telemetry_scaler_X.joblib")
+        joblib.dump(scaler_y, scalers_dir / f"telemetry_scaler_y.joblib")
+        print(f"Scalers saved to: {scalers_dir / 'telemetry_scaler_X.joblib'} and {scalers_dir / 'telemetry_scaler_y.joblib'}")
+        return
     
     # Check for minimum data requirement
     min_samples = WINDOW_SIZE * 10  # Need at least 10 windows
@@ -169,6 +183,14 @@ def main():
     X_test, y_test = create_sequences_transform(df_test, feature_cols, target_col, WINDOW_SIZE)
     
     print(f"\nSequence shapes: X_train={X_train.shape}, y_train={y_train.shape}")
+    
+    # Fit target scaler on training labels and save both scalers for production
+    scaler_y = StandardScaler()
+    scaler_y.fit(y_train.reshape(-1, 1))
+    scalers_dir = Path(__file__).parent
+    joblib.dump(scaler, scalers_dir / f"telemetry_scaler_X.joblib")
+    joblib.dump(scaler_y, scalers_dir / f"telemetry_scaler_y.joblib")
+    print(f"Training-time scalers saved to: {scalers_dir / 'telemetry_scaler_X.joblib'} and {scalers_dir / 'telemetry_scaler_y.joblib'}")
     
     # Build and compile model
     model = build_model(input_shape=(WINDOW_SIZE, len(feature_cols)))

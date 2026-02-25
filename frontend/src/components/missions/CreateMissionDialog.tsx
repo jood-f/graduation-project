@@ -8,7 +8,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { useCreateMission } from '@/hooks/useMissions';
-import { mockPanels, mockSites } from '@/data/mockData';
+import { usePanels } from '@/hooks/usePanels';
+import { useSites } from '@/hooks/useSites';
 
 const missionSchema = z.object({
   panelId: z.string().min(1, 'Please select a panel'),
@@ -24,6 +25,8 @@ interface CreateMissionDialogProps {
 
 export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogProps) {
   const createMutation = useCreateMission();
+  const { data: sites = [], isLoading: sitesLoading } = useSites();
+  const { data: panels = [], isLoading: panelsLoading } = usePanels();
   const [selectedSite, setSelectedSite] = useState<string>('');
 
   const form = useForm<MissionFormValues>({
@@ -35,15 +38,13 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
   });
 
   const onSubmit = async (values: MissionFormValues) => {
-    const panel = mockPanels.find(p => p.id === values.panelId);
-    const site = mockSites.find(s => s.id === values.siteId);
+    const panel = panels.find(p => p.id === values.panelId);
+    const site = sites.find(s => s.id === values.siteId);
 
     if (!panel || !site) return;
 
     await createMutation.mutateAsync({
       panel_id: panel.id,
-      panel_label: panel.label,
-      site_name: site.name,
     });
 
     form.reset();
@@ -59,7 +60,7 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
 
   // Filter panels by selected site
   const availablePanels = selectedSite
-    ? mockPanels.filter(panel => panel.siteId === selectedSite)
+    ? panels.filter((panel) => panel.site_id === selectedSite)
     : [];
 
   return (
@@ -95,7 +96,7 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {mockSites.map((site) => (
+                      {sites.map((site) => (
                         <SelectItem key={site.id} value={site.id}>
                           {site.name}
                         </SelectItem>
@@ -127,7 +128,7 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
                       {availablePanels.length > 0 ? (
                         availablePanels.map((panel) => (
                           <SelectItem key={panel.id} value={panel.id}>
-                            {panel.label} ({panel.serialNumber})
+                            {panel.label || 'Unknown'} ({panel.serial_number || 'N/A'})
                           </SelectItem>
                         ))
                       ) : (
@@ -146,14 +147,14 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
+              <Button type="submit" disabled={createMutation.isPending || sitesLoading || panelsLoading}>
                 {createMutation.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Creating...
                   </>
                 ) : (
-                  'Create Mission'
+                  sitesLoading || panelsLoading ? 'Loading...' : 'Create Mission'
                 )}
               </Button>
             </DialogFooter>
