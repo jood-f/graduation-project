@@ -34,6 +34,11 @@ interface MissionRow {
   } | null;
 }
 
+const normalizeMissionStatus = (status: string): string => {
+  if (status === 'DRAFT') return 'PENDING_APPROVAL';
+  return status;
+};
+
 export interface MissionImage {
   id: string;
   mission_id: string;
@@ -68,7 +73,7 @@ export function useMissions() {
       return (data as unknown as MissionRow[]).map((row) => ({
         id: row.id,
         panel_id: row.panel_id,
-        status: row.status,
+        status: normalizeMissionStatus(row.status),
         approved_by_user_id: row.approved_by_user_id,
         approved_by_name: null,
         approved_at: row.approved_at,

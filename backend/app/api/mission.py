@@ -13,13 +13,20 @@ from app.schemas.mission import MissionCreate, MissionOut, MissionStatus
 router = APIRouter(prefix="/api/v1/missions", tags=["Missions"])
 
 
+def _normalize_legacy_status(mission: Mission) -> Mission:
+    # Backward compatibility: convert legacy DRAFT rows to PENDING_APPROVAL.
+    if mission.status == "DRAFT":
+        mission.status = "PENDING_APPROVAL"
+    return mission
+
+
 @router.post("", response_model=MissionOut)
 def create_mission(payload: MissionCreate, db: Session = Depends(get_db)):
     mission = Mission(**payload.model_dump())
     db.add(mission)
     db.commit()
     db.refresh(mission)
-    return mission
+    return _normalize_legacy_status(mission)
 
 
 @router.get("", response_model=list[MissionOut])
@@ -35,7 +42,17 @@ def list_missions(
     if panel_id:
         q = q.filter(Mission.panel_id == panel_id)
 
-    return q.order_by(Mission.created_at.desc()).all()
+    missions = q.order_by(Mission.created_at.desc()).all()
+    changed = False
+    for mission in missions:
+        if mission.status == "DRAFT":
+            mission.status = "PENDING_APPROVAL"
+            changed = True
+
+    if changed:
+        db.commit()
+
+    return missions
 
 
 @router.get("/{mission_id}", response_model=MissionOut)
@@ -43,6 +60,10 @@ def get_mission(mission_id: uuid.UUID, db: Session = Depends(get_db)):
     mission = db.query(Mission).filter(Mission.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
+    if mission.status == "DRAFT":
+        mission.status = "PENDING_APPROVAL"
+        db.commit()
+        db.refresh(mission)
     return mission
 
 

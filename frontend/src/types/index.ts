@@ -59,7 +59,7 @@ export interface Anomaly {
   message: string;
 }
 
-export type MissionStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
+export type MissionStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
 
 export interface Mission {
   id: string;

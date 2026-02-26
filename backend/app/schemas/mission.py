@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Literal, Optional
 
 MissionStatus = Literal[
-    "DRAFT",
     "PENDING_APPROVAL",
     "APPROVED",
     "IN_FLIGHT",
@@ -16,7 +15,7 @@ MissionStatus = Literal[
 
 class MissionCreate(BaseModel):
     panel_id: UUID
-    status: MissionStatus = "DRAFT"
+    status: MissionStatus = "PENDING_APPROVAL"
 
 
 class MissionOut(BaseModel):

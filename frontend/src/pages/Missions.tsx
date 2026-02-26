@@ -28,10 +28,9 @@ import { MissionImageUpload } from '@/components/missions/MissionImageUpload';
 import { MissionDetailDialog } from '@/components/missions/MissionDetailDialog';
 import { CreateMissionDialog } from '@/components/missions/CreateMissionDialog';
 
-type MissionStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
+type MissionStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
 
 const statusStyles: Record<MissionStatus, string> = {
-  DRAFT: 'bg-muted text-muted-foreground',
   PENDING_APPROVAL: 'bg-warning/10 text-warning border-warning/20',
   APPROVED: 'bg-info/10 text-info border-info/20',
   IN_FLIGHT: 'bg-primary/10 text-primary border-primary/20',
@@ -40,7 +39,6 @@ const statusStyles: Record<MissionStatus, string> = {
 };
 
 const statusIcons: Record<MissionStatus, React.ElementType> = {
-  DRAFT: Clock,
   PENDING_APPROVAL: Clock,
   APPROVED: CheckCircle,
   IN_FLIGHT: Plane,
@@ -115,7 +113,6 @@ export default function Missions() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="DRAFT">Draft</SelectItem>
                   <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
                   <SelectItem value="APPROVED">Approved</SelectItem>
                   <SelectItem value="IN_FLIGHT">In Flight</SelectItem>

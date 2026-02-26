@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils';
 import { Image as ImageIcon, ScanEye } from 'lucide-react';
 
 const statusStyles: Record<string, string> = {
-  DRAFT: 'bg-muted text-muted-foreground',
   PENDING_APPROVAL: 'bg-warning/10 text-warning border-warning/20',
   APPROVED: 'bg-info/10 text-info border-info/20',
   IN_FLIGHT: 'bg-primary/10 text-primary border-primary/20',
@@ -45,7 +44,7 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Status:</span>
-              <Badge className={cn('ml-2', statusStyles[mission.status])}>
+              <Badge className={cn('ml-2', statusStyles[mission.status] || statusStyles.PENDING_APPROVAL)}>
                 {mission.status.replace('_', ' ')}
               </Badge>
             </div>

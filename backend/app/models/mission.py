@@ -23,7 +23,7 @@ class Mission(Base):
         index=True,
     )
 
-    status: Mapped[str] = mapped_column(String, nullable=False, default="DRAFT", index=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="PENDING_APPROVAL", index=True)
 
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True

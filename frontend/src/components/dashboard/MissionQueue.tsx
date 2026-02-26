@@ -5,10 +5,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useMissions, type Mission } from '@/hooks/useMissions';
 import { cn } from '@/lib/utils';
 
-type MissionStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
+type MissionStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
 
 const statusStyles: Record<MissionStatus, { bg: string; icon: React.ElementType }> = {
-  DRAFT: { bg: 'bg-muted text-muted-foreground', icon: Clock },
   PENDING_APPROVAL: { bg: 'bg-warning/10 text-warning', icon: Clock },
   APPROVED: { bg: 'bg-info/10 text-info', icon: CheckCircle },
   IN_FLIGHT: { bg: 'bg-primary/10 text-primary', icon: Plane },
@@ -18,7 +17,7 @@ const statusStyles: Record<MissionStatus, { bg: string; icon: React.ElementType 
 
 function MissionItem({ mission }: { mission: Mission }) {
   const statusKey = mission.status.toUpperCase() as MissionStatus;
-  const status = statusStyles[statusKey] || statusStyles.DRAFT;
+  const status = statusStyles[statusKey] || statusStyles.PENDING_APPROVAL;
   const StatusIcon = status.icon;
   
   return (
