@@ -1,15 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.db.database import get_db
+from app.db.deps import get_db
 from app.models.profile import Profile
 from app.schemas.profile import ProfileOut, ProfileUpdate
 from uuid import UUID
+from app.security import AuthUser, get_current_user
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
 
 @router.get("/{user_id}", response_model=ProfileOut)
-def get_profile(user_id: UUID, db: Session = Depends(get_db)):
+def get_profile(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
     profile = db.query(Profile).filter(Profile.user_id == user_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -20,7 +25,8 @@ def get_profile(user_id: UUID, db: Session = Depends(get_db)):
 def update_profile(
     user_id: UUID,
     data: ProfileUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     profile = db.query(Profile).filter(Profile.user_id == user_id).first()
     if not profile:

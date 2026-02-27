@@ -6,6 +6,10 @@ import { Upload, Loader2, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useUploadMissionImage } from '@/hooks/useMissions';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 interface MissionImageUploadProps {
   missionId: string;
@@ -23,12 +27,41 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setSelectedFiles(Array.from(e.target.files));
+      const incoming = Array.from(e.target.files);
+      const valid: File[] = [];
+      const rejected: string[] = [];
+      const seen = new Set<string>();
+
+      incoming.forEach((file) => {
+        const dedupeKey = `${file.name}:${file.size}:${file.lastModified}`;
+        if (seen.has(dedupeKey)) return;
+        seen.add(dedupeKey);
+
+        if (!ACCEPTED_TYPES.has(file.type)) {
+          rejected.push(`${file.name} (unsupported type)`);
+          return;
+        }
+
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          rejected.push(`${file.name} (>10MB)`);
+          return;
+        }
+
+        valid.push(file);
+      });
+
+      setSelectedFiles(valid);
+      if (rejected.length > 0) {
+        toast.error(`Skipped ${rejected.length} invalid file(s). Use JPG, PNG, WEBP up to 10MB.`);
+      }
     }
   };
 
   const handleUpload = async () => {
+    if (selectedFiles.length === 0) return;
+
     setIsAnalyzing(enableAI);
+    const failedFiles: File[] = [];
     try {
       for (const file of selectedFiles) {
         try {
@@ -39,11 +72,17 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
           });
         } catch (error) {
           console.error(`Failed to upload ${file.name}:`, error);
-          // Continue with next file instead of stopping
+          failedFiles.push(file);
         }
       }
-      setSelectedFiles([]);
-      onOpenChange(false);
+
+      if (failedFiles.length === 0) {
+        setSelectedFiles([]);
+        onOpenChange(false);
+      } else {
+        setSelectedFiles(failedFiles);
+        toast.error(`${failedFiles.length} file(s) failed to upload. Fix and retry.`);
+      }
     } catch (error) {
       console.error('Upload batch error:', error);
     } finally {

@@ -16,6 +16,7 @@ from app.models.mission_images import MissionImage
 from app.models.inspection_result import InspectionResult, InspectionStatus
 from app.schemas.mission_images import MissionImageCreate, MissionImageOut, AnalysisResponse, DetectionResult
 from app.services.cv_service import get_cv_service
+from app.security import AuthUser, get_current_user, require_roles
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -120,7 +121,11 @@ def _download_image_from_storage(storage_path: str, tmp_path: str) -> None:
 
 
 @router.post("", response_model=MissionImageOut)
-def create_mission_image(payload: MissionImageCreate, db: Session = Depends(get_db)):
+def create_mission_image(
+    payload: MissionImageCreate,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+):
     # Ensure mission exists
     mission = db.query(Mission).filter(Mission.id == payload.mission_id).first()
     if not mission:
@@ -142,6 +147,7 @@ def create_mission_image(payload: MissionImageCreate, db: Session = Depends(get_
 def list_mission_images(
     db: Session = Depends(get_db),
     mission_id: uuid.UUID | None = None,
+    current_user: AuthUser = Depends(get_current_user),
 ):
     q = db.query(MissionImage)
     if mission_id:
@@ -150,7 +156,11 @@ def list_mission_images(
 
 
 @router.get("/{image_id}", response_model=MissionImageOut)
-def get_mission_image(image_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_mission_image(
+    image_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
     img = db.query(MissionImage).filter(MissionImage.id == image_id).first()
     if not img:
         raise HTTPException(status_code=404, detail="Mission image not found")
@@ -161,7 +171,8 @@ def get_mission_image(image_id: uuid.UUID, db: Session = Depends(get_db)):
 def analyze_mission_image(
     image_id: uuid.UUID,
     confidence_threshold: float = Query(default=0.5, ge=0.0, le=1.0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Analyze a mission image using the YOLOv8 CV model.
@@ -264,7 +275,8 @@ def analyze_mission_image(
 def reanalyze_mission_image(
     image_id: uuid.UUID,
     confidence_threshold: float = Query(default=0.5, ge=0.0, le=1.0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """Delete previous inspection results for the image and run detection again."""
     img = db.query(MissionImage).filter(MissionImage.id == image_id).first()
@@ -351,7 +363,11 @@ def reanalyze_mission_image(
 
 
 @router.get("/{image_id}/results", response_model=List[DetectionResult])
-def get_image_analysis_results(image_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_image_analysis_results(
+    image_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
     """
     Get existing analysis results for a mission image.
     """
@@ -383,7 +399,11 @@ def get_image_analysis_results(image_id: uuid.UUID, db: Session = Depends(get_db
 
 
 @router.delete("/{image_id}")
-def delete_mission_image(image_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_mission_image(
+    image_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+):
     img = db.query(MissionImage).filter(MissionImage.id == image_id).first()
     if not img:
         raise HTTPException(status_code=404, detail="Mission image not found")

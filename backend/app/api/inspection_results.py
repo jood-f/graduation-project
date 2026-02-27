@@ -10,12 +10,17 @@ from app.models.mission_images import MissionImage
 from app.models.panel import Panel
 from app.models.site import Site
 from app.schemas.inspection_result import InspectionResultCreate, InspectionResultOut, InspectionResultUpdate
+from app.security import AuthUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1/inspection-results", tags=["Inspection Results"])
 
 
 @router.post("", response_model=InspectionResultOut)
-def create_inspection_result(payload: InspectionResultCreate, db: Session = Depends(get_db)):
+def create_inspection_result(
+    payload: InspectionResultCreate,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+):
     row = InspectionResult(
         mission_id=payload.mission_id,
         panel_id=payload.panel_id,
@@ -34,7 +39,12 @@ def create_inspection_result(payload: InspectionResultCreate, db: Session = Depe
 
 
 @router.get("", response_model=list[InspectionResultOut])
-def list_inspection_results(db: Session = Depends(get_db), limit: int = 100, offset: int = 0):
+def list_inspection_results(
+    db: Session = Depends(get_db),
+    limit: int = 100,
+    offset: int = 0,
+    current_user: AuthUser = Depends(get_current_user),
+):
     return (
         db.query(InspectionResult)
         .order_by(InspectionResult.inspected_at.desc())
@@ -51,6 +61,7 @@ def list_cv_anomalies(
     limit: int = Query(default=500, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Return CV anomaly rows strictly from inspection_results joined to mission_images.
@@ -124,7 +135,11 @@ def list_cv_anomalies(
 
 
 @router.get("/{inspection_id}", response_model=InspectionResultOut)
-def get_inspection_result(inspection_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_inspection_result(
+    inspection_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
     row = db.query(InspectionResult).filter(InspectionResult.id == inspection_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Inspection result not found")
@@ -132,7 +147,12 @@ def get_inspection_result(inspection_id: uuid.UUID, db: Session = Depends(get_db
 
 
 @router.patch("/{inspection_id}", response_model=InspectionResultOut)
-def update_inspection_result(inspection_id: uuid.UUID, payload: InspectionResultUpdate, db: Session = Depends(get_db)):
+def update_inspection_result(
+    inspection_id: uuid.UUID,
+    payload: InspectionResultUpdate,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+):
     row = db.query(InspectionResult).filter(InspectionResult.id == inspection_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Inspection result not found")

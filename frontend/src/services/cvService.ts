@@ -2,6 +2,7 @@
  * CV Analysis Service
  * Calls the YOLOv8 backend API for solar panel defect detection
  */
+import { apiFetch } from '@/lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
@@ -37,7 +38,7 @@ export async function analyzeImage(
   imageId: string, 
   confidenceThreshold: number = 0.5
 ): Promise<AnalysisResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/mission-images/${imageId}/analyze?confidence_threshold=${confidenceThreshold}`,
     {
       method: 'POST',
@@ -61,7 +62,7 @@ export async function analyzeImage(
  * @returns List of previous detection results
  */
 export async function getImageResults(imageId: string): Promise<DetectionResult[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/mission-images/${imageId}/results`,
     {
       method: 'GET',
@@ -85,7 +86,7 @@ export async function getImageResults(imageId: string): Promise<DetectionResult[
  */
 export async function checkModelAvailability(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE_URL}/cv/status`);
+    const response = await apiFetch(`${API_BASE_URL}/cv/status`);
     if (response.ok) {
       const data = await response.json();
       return data.available === true;

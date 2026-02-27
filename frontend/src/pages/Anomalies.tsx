@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -18,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useFaults } from '@/hooks/useFaults';
 import { useMLAnomalies, useRunMLAnomalyScan, type RunScanProgress } from '@/hooks/useMLAnomalies';
 import { useSites } from '@/hooks/useSites';
@@ -78,7 +79,6 @@ export default function Anomalies() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
-  const [autoScanTriggered, setAutoScanTriggered] = useState(false);
   const [scanProgress, setScanProgress] = useState<RunScanProgress | null>(null);
 
   const { data: anomalies, isLoading: mlLoading } = useMLAnomalies();
@@ -86,10 +86,7 @@ export default function Anomalies() {
   const runScan = useRunMLAnomalyScan();
   const { data: sites } = useSites();
 
-  useEffect(() => {
-    if (autoScanTriggered || runScan.isPending) return;
-
-    setAutoScanTriggered(true);
+  const handleScanAllPanels = () => {
     runScan.mutate(
       {
         threshold: 5,
@@ -108,7 +105,7 @@ export default function Anomalies() {
         },
       }
     );
-  }, [autoScanTriggered, runScan]);
+  };
 
   const allAnomalies = useMemo<CombinedAnomaly[]>(() => {
     const mlRows: CombinedAnomaly[] = (anomalies || []).map((item) => ({
@@ -165,6 +162,14 @@ export default function Anomalies() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Detected Anomalies ({filteredAnomalies.length})</CardTitle>
             <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={handleScanAllPanels}
+                disabled={runScan.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${runScan.isPending ? 'animate-spin' : ''}`} />
+                {runScan.isPending ? 'Scanning...' : 'Run ML Scan'}
+              </Button>
               <Select value={modelFilter} onValueChange={setModelFilter}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="All Models" />

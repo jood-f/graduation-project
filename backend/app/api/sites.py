@@ -3,11 +3,16 @@ from sqlalchemy.orm import Session
 from app.db.deps import get_db
 from app.models.site import Site
 from app.schemas.site import SiteCreate, SiteOut
+from app.security import AuthUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1/sites", tags=["Sites"])
 
 @router.post("", response_model=SiteOut)
-def create_site(payload: SiteCreate, db: Session = Depends(get_db)):
+def create_site(
+    payload: SiteCreate,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin"])),
+):
     site = Site(**payload.model_dump())
     db.add(site)
     db.commit()
@@ -15,5 +20,8 @@ def create_site(payload: SiteCreate, db: Session = Depends(get_db)):
     return site
 
 @router.get("", response_model=list[SiteOut])
-def list_sites(db: Session = Depends(get_db)):
+def list_sites(
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
     return db.query(Site).all()

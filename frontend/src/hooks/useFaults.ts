@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
@@ -38,7 +39,7 @@ export function useFaults() {
   return useQuery({
     queryKey: ['faults-cv-inspection-results'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/inspection-results/cv-anomalies`);
+      const response = await apiFetch(`${API_BASE_URL}/inspection-results/cv-anomalies`);
       if (!response.ok) {
         const text = await response.text();
         throw new Error(text || 'Failed to fetch CV anomalies');
@@ -74,7 +75,7 @@ export function useMissionFaults(missionId: string | null) {
     queryFn: async () => {
       if (!missionId) return [] as Fault[];
 
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/inspection-results/cv-anomalies?mission_id=${encodeURIComponent(missionId)}`
       );
       if (!response.ok) {

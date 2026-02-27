@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Shield, Users } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
 import type { UserRole } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
@@ -59,11 +60,8 @@ export default function Admin() {
         throw new Error('Current user not found');
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.id,
-        },
+      const response = await apiFetch(`${API_BASE_URL}/admin/users`, {
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
@@ -90,12 +88,9 @@ export default function Admin() {
         throw new Error('Current user not found');
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
+      const response = await apiFetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.id,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole }),
       });
 

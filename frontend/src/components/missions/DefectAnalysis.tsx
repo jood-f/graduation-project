@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useMissionFaults } from '@/hooks/useFaults';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { apiFetch } from '@/lib/api';
 
 interface DefectAnalysisProps {
   missionId: string;
@@ -64,7 +65,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
 
   const reanalyzeMutation = useMutation({
     mutationFn: async ({ imageId, threshold = 0.5 }: { imageId: string; threshold?: number }) => {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/mission-images/${imageId}/re-analyze?confidence_threshold=${threshold}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' } }
       );
@@ -95,7 +96,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
       const rows = await Promise.all(
         missionImages.map(async (img) => {
           try {
-            const res = await fetch(`${API_BASE_URL}/mission-images/${img.id}/results`);
+            const res = await apiFetch(`${API_BASE_URL}/mission-images/${img.id}/results`);
             if (!res.ok) {
               return {
                 imageId: img.id,

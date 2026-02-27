@@ -5,12 +5,17 @@ from sqlalchemy.orm import Session
 from app.db.deps import get_db
 from app.models.panel import Panel
 from app.schemas.panel import PanelCreate, PanelOut, PanelUpdate
+from app.security import AuthUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1/panels", tags=["Panels"])
 
 
 @router.post("", response_model=PanelOut)
-def create_panel(payload: PanelCreate, db: Session = Depends(get_db)):
+def create_panel(
+    payload: PanelCreate,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
+):
     panel = Panel(
         site_id=payload.site_id,
         label=payload.label,
@@ -28,7 +33,11 @@ def list_panels(
     site_id: uuid.UUID | None = Query(default=None),
     include_deleted: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
+    if include_deleted and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required for deleted records")
+
     q = db.query(Panel)
     if site_id:
         q = q.filter(Panel.site_id == site_id)
@@ -38,7 +47,11 @@ def list_panels(
 
 
 @router.get("/{panel_id}", response_model=PanelOut)
-def get_panel(panel_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_panel(
+    panel_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
     panel = db.query(Panel).filter(Panel.id == panel_id).first()
     if not panel:
         raise HTTPException(status_code=404, detail="Panel not found")
@@ -46,7 +59,12 @@ def get_panel(panel_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @router.patch("/{panel_id}", response_model=PanelOut)
-def update_panel(panel_id: uuid.UUID, payload: PanelUpdate, db: Session = Depends(get_db)):
+def update_panel(
+    panel_id: uuid.UUID,
+    payload: PanelUpdate,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
+):
     panel = db.query(Panel).filter(Panel.id == panel_id).first()
     if not panel:
         raise HTTPException(status_code=404, detail="Panel not found")
@@ -65,7 +83,11 @@ def update_panel(panel_id: uuid.UUID, payload: PanelUpdate, db: Session = Depend
 
 
 @router.delete("/{panel_id}")
-def soft_delete_panel(panel_id: uuid.UUID, db: Session = Depends(get_db)):
+def soft_delete_panel(
+    panel_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin"])),
+):
     panel = db.query(Panel).filter(Panel.id == panel_id).first()
     if not panel:
         raise HTTPException(status_code=404, detail="Panel not found")

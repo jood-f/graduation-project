@@ -7,6 +7,7 @@ import { analyzeImage, checkModelAvailability } from '@/services/cvService';
 import { preprocessImage, detectDefects } from '@/lib/gemini';
 import { detectHighEdgeDensity } from '@/lib/imageHeuristics';
 import { useCreateInspectionResults } from './useAI';
+import { apiFetch } from '@/lib/api';
 
 export interface Mission {
   id: string;
@@ -38,6 +39,10 @@ const normalizeMissionStatus = (status: string): string => {
   if (status === 'DRAFT') return 'PENDING_APPROVAL';
   return status;
 };
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+const MAX_IMAGE_FILE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export interface MissionImage {
   id: string;
@@ -201,6 +206,13 @@ export function useUploadMissionImage() {
         throw new Error('User not authenticated');
       }
 
+      if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+        throw new Error('Unsupported image type. Allowed: JPG, PNG, WEBP.');
+      }
+      if (file.size > MAX_IMAGE_FILE_BYTES) {
+        throw new Error('File exceeds 10MB limit.');
+      }
+
       // Upload is allowed only after mission approval and before completion
       const { data: missionRow, error: missionError } = await supabase
         .from('missions')
@@ -290,9 +302,9 @@ export function useUploadMissionImage() {
             });
           }
         } else {
-          // Backend model not available — run client-side mock analysis (non-persistent)
+          // Backend model not available - run client-side mock analysis (non-persistent)
           try {
-            console.log('[Upload] Backend CV unavailable — running client mock analysis');
+            console.log('[Upload] Backend CV unavailable - running client mock analysis');
             const base64 = await preprocessImage(file);
             const detection = await detectDefects(base64, 'RGB');
 
@@ -315,9 +327,9 @@ export function useUploadMissionImage() {
             if (mapped.length > 0) {
               // save to client store (not persisted to backend DB)
               await createInspection.mutationFn(mapped as any);
-              toast.info('Image uploaded — using client AI fallback (not persisted)');
+              toast.info('Image uploaded - using client AI fallback (not persisted)');
             } else {
-              // No defects returned from client AI — run a quick local heuristic (edge detection)
+              // No defects returned from client AI - run a quick local heuristic (edge detection)
               try {
                 const heuristic = await detectHighEdgeDensity(file);
                 if (heuristic.isLikelyDefect) {
@@ -337,13 +349,13 @@ export function useUploadMissionImage() {
                   }];
 
                   await createInspection.mutationFn(auto as any);
-                  toast.warning('Image uploaded — client heuristic detected a probable defect (local check)');
+                  toast.warning('Image uploaded - client heuristic detected a probable defect (local check)');
                 } else {
-                  toast.success('Image uploaded — client AI found no defects');
+                  toast.success('Image uploaded - client AI found no defects');
                 }
               } catch (heurErr) {
                 console.error('Heuristic check failed:', heurErr);
-                toast.success('Image uploaded — client AI found no defects');
+                toast.success('Image uploaded - client AI found no defects');
               }
             }
           } catch (err) {
@@ -375,7 +387,7 @@ export function useDeleteMissionImage() {
 
   return useMutation({
     mutationFn: async ({ imageId, missionId }: { imageId: string; missionId: string }) => {
-      const resp = await fetch(`http://127.0.0.1:8000/api/v1/mission-images/${imageId}`, {
+      const resp = await apiFetch(`${API_BASE_URL}/mission-images/${imageId}`, {
         method: 'DELETE',
       });
       if (!resp.ok) {
@@ -398,7 +410,6 @@ export function useDeleteMissionImage() {
 export function useCreateMission() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
   const extractErrorMessage = (error: unknown): string => {
     if (error instanceof Error && error.message) return error.message;
@@ -456,7 +467,7 @@ export function useCreateMission() {
       }
 
       // Fallback: create mission through backend API (direct DB connection) when Supabase RLS blocks inserts.
-      const response = await fetch(`${API_BASE_URL}/missions`, {
+      const response = await apiFetch(`${API_BASE_URL}/missions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(backendPayload),
@@ -480,3 +491,4 @@ export function useCreateMission() {
     },
   });
 }
+

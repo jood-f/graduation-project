@@ -9,6 +9,7 @@ from app.db.deps import get_db
 from app.models.panel import Panel
 from app.models.telemetry import Telemetry
 from app.schemas.telemetry import TelemetryCreate, TelemetryOut
+from app.security import AuthUser, get_current_user, require_roles
 
 
 # Lazily import the telemetry model service to avoid requiring heavy ML
@@ -120,7 +121,7 @@ def _analyze_panel_telemetry(
     Run ML anomaly analysis for a single panel and persist metrics to telemetry.
     Returns a structured result and never crashes on empty/malformed panel data.
     """
-    since = datetime.utcnow() - timedelta(hours=hours)
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
     records = (
         db.query(Telemetry)
         .filter(Telemetry.panel_id == panel_id)
@@ -249,6 +250,7 @@ def predict_power(
     panel_id: uuid.UUID,
     limit: int = Query(default=100, ge=20, le=1000),
     db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Predict power output using LSTM model on recent telemetry data.
@@ -311,6 +313,7 @@ def detect_anomalies(
     threshold: float = Query(default=5.0, ge=1.0, le=50.0),
     hours: int = Query(default=24, ge=1, le=168),
     db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """Detect anomalies in telemetry data based on prediction errors."""
     result = _analyze_panel_telemetry(
@@ -334,6 +337,7 @@ def scan_all_panels_for_anomalies(
     batch_size: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
     """
     Scan anomalies for all active panels in batches.
@@ -389,6 +393,7 @@ def fit_scalers_for_panel(
     panel_id: uuid.UUID,
     limit: int = Query(default=1000, ge=100, le=10000),
     db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
     """Fit telemetry scalers for a panel using historical valid records."""
     records = (
@@ -426,6 +431,7 @@ def fit_scalers_for_panel(
 def predict_next_power(
     panel_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
 ):
     """
     Predict next power output based on recent telemetry.
@@ -466,6 +472,6 @@ def predict_next_power(
 
 
 @router.get("/model-info", response_model=dict)
-def get_model_info():
+def get_model_info(current_user: AuthUser = Depends(get_current_user)):
     """Get information about the loaded ML model."""
     return _get_model_service().get_model_info()
