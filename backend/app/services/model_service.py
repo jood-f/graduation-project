@@ -264,8 +264,10 @@ class TelemetryModelService:
         else:
             prediction = pred_arr
 
+        predicted_power = max(float(prediction[0][0]), 0.0)
+
         return {
-            'predicted_power': round(float(prediction[0][0]), 2),
+            'predicted_power': round(predicted_power, 2),
             'based_on_records': self.sequence_length,
             'latest_timestamp': recent[-1].get('timestamp')
         }

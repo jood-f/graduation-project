@@ -9,35 +9,39 @@ export function TelemetryChart() {
   const telemetry = telemetryResult?.telemetry ?? [];
   const isFallback = telemetryResult?.isFallback ?? false;
   const anchorTimestamp = telemetryResult?.anchorTimestamp;
-  const chartTitle = isFallback ? 'Power Output (Latest Available 12 Hours)' : 'Power Output (Last 12 Hours)';
+  const chartTitle = isFallback ? 'Power Output (Latest Available Data)' : 'Power Output (Last 12 Hours)';
 
   const chartData = useMemo(() => {
     if (!telemetry || telemetry.length === 0) return [];
-    
-    // Group by hour and average the power
-    const hourlyData: { [key: string]: { total: number; count: number } } = {};
-    
-    telemetry.forEach(t => {
-      const hour = new Date(t.timestamp).toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
-      if (!hourlyData[hour]) {
-        hourlyData[hour] = { total: 0, count: 0 };
-      }
-      hourlyData[hour].total += t.power || 0;
-      hourlyData[hour].count += 1;
+
+    const hourlyData = new Map<string, { total: number; count: number }>();
+
+    telemetry.forEach((t) => {
+      const bucket = new Date(t.timestamp);
+      bucket.setMinutes(0, 0, 0);
+      const key = bucket.toISOString();
+      const entry = hourlyData.get(key) || { total: 0, count: 0 };
+      entry.total += t.power || 0;
+      entry.count += 1;
+      hourlyData.set(key, entry);
     });
 
-    return Object.entries(hourlyData).map(([time, data]) => ({
-      time,
-      power: Math.round(data.total / data.count),
-    }));
+    return Array.from(hourlyData.entries())
+      .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+      .map(([timestamp, data]) => ({
+        time: new Date(timestamp).toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        power: Math.round(data.total / data.count),
+      }));
   }, [telemetry]);
 
   if (isLoading) {
     return (
-      <Card className="col-span-2">
+      <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>{chartTitle}</CardTitle>
         </CardHeader>
@@ -50,7 +54,7 @@ export function TelemetryChart() {
 
   if (error || chartData.length === 0) {
     return (
-      <Card className="col-span-2">
+      <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>{chartTitle}</CardTitle>
         </CardHeader>
@@ -64,13 +68,13 @@ export function TelemetryChart() {
   }
 
   return (
-    <Card className="col-span-2">
+    <Card className="lg:col-span-2">
       <CardHeader>
         <div className="space-y-1">
           <CardTitle>{chartTitle}</CardTitle>
           {isFallback && anchorTimestamp && (
             <p className="text-xs text-muted-foreground">
-              No data in the current 12-hour window. Showing latest window ending{' '}
+              Recent data is sparse. Showing latest available history ending{' '}
               {new Date(anchorTimestamp).toLocaleString()}.
             </p>
           )}

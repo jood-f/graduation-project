@@ -1,11 +1,41 @@
 import { supabase } from '@/integrations/supabase/client';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
-function resolveUrl(path: string): string {
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+}
+
+function getResolvedBaseUrl(): string {
+  const normalized = normalizeBaseUrl(RAW_BASE_URL);
+  if (typeof window === 'undefined') return normalized;
+
+  try {
+    const parsed = new URL(normalized);
+    const currentHost = window.location.hostname;
+
+    // If the app is opened from another device, loopback API hosts are unreachable there.
+    if (isLoopbackHost(parsed.hostname) && !isLoopbackHost(currentHost)) {
+      parsed.hostname = currentHost;
+      return normalizeBaseUrl(parsed.toString());
+    }
+  } catch {
+    // Keep the raw configured value if parsing fails.
+  }
+
+  return normalized;
+}
+
+const BASE_URL = getResolvedBaseUrl();
+
+function resolveUrl(path: string, baseUrl: string = BASE_URL): string {
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  if (path.startsWith('/')) return `${BASE_URL}${path}`;
-  return `${BASE_URL}/${path}`;
+  if (path.startsWith('/')) return `${baseUrl}${path}`;
+  return `${baseUrl}/${path}`;
 }
 
 async function getAuthHeaders(headers?: HeadersInit): Promise<Headers> {
@@ -20,7 +50,29 @@ async function getAuthHeaders(headers?: HeadersInit): Promise<Headers> {
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = await getAuthHeaders(init.headers);
-  return fetch(resolveUrl(path), { ...init, headers });
+  const requestInit = { ...init, headers };
+  const primaryUrl = resolveUrl(path);
+
+  try {
+    return await fetch(primaryUrl, requestInit);
+  } catch (error) {
+    // Retry once with runtime host when configured API host is loopback.
+    if (typeof window !== 'undefined') {
+      try {
+        const parsed = new URL(BASE_URL);
+        const runtimeHost = window.location.hostname;
+        if (isLoopbackHost(parsed.hostname) && !isLoopbackHost(runtimeHost)) {
+          parsed.hostname = runtimeHost;
+          const retryUrl = resolveUrl(path, normalizeBaseUrl(parsed.toString()));
+          return await fetch(retryUrl, requestInit);
+        }
+      } catch {
+        // Fall through to the original error.
+      }
+    }
+
+    throw error;
+  }
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

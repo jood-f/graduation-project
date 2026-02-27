@@ -146,6 +146,14 @@ export function useLatestTelemetry(hours: number = 12) {
   return useQuery({
     queryKey: ['latest-telemetry', hours],
     queryFn: async (): Promise<LatestTelemetryResult> => {
+      const MIN_POINTS_FOR_CHART = 2;
+      const EXTENDED_FALLBACK_LIMIT = 240;
+      const withPower = (rows: Telemetry[]) =>
+        rows.map((t) => ({
+          ...t,
+          power: t.voltage * t.current,
+        }));
+
       const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
       const { data, error } = await (supabase as any)
@@ -156,12 +164,9 @@ export function useLatestTelemetry(hours: number = 12) {
 
       if (error) throw error;
 
-      const recentTelemetry = (data as Telemetry[]).map(t => ({
-        ...t,
-        power: t.voltage * t.current,
-      }));
+      const recentTelemetry = withPower(data as Telemetry[]);
 
-      if (recentTelemetry.length > 0) {
+      if (recentTelemetry.length >= MIN_POINTS_FOR_CHART) {
         return {
           telemetry: recentTelemetry,
           isFallback: false,
@@ -200,11 +205,30 @@ export function useLatestTelemetry(hours: number = 12) {
 
       if (fallbackError) throw fallbackError;
 
+      const fallbackTelemetry = withPower(fallbackData as Telemetry[]);
+      if (fallbackTelemetry.length >= MIN_POINTS_FOR_CHART) {
+        return {
+          telemetry: fallbackTelemetry,
+          isFallback: true,
+          anchorTimestamp: latestTimestamp,
+        };
+      }
+
+      // If data is very sparse, show the latest available history so the chart remains informative.
+      const { data: extendedFallbackData, error: extendedFallbackError } = await (supabase as any)
+        .from('telemetry')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(EXTENDED_FALLBACK_LIMIT);
+
+      if (extendedFallbackError) throw extendedFallbackError;
+
+      const extendedFallbackTelemetry = withPower(
+        ((extendedFallbackData as Telemetry[]) || []).slice().reverse()
+      );
+
       return {
-        telemetry: (fallbackData as Telemetry[]).map(t => ({
-          ...t,
-          power: t.voltage * t.current,
-        })),
+        telemetry: extendedFallbackTelemetry.length > 0 ? extendedFallbackTelemetry : recentTelemetry,
         isFallback: true,
         anchorTimestamp: latestTimestamp,
       };

@@ -11,7 +11,7 @@ from app.api.panels import router as panels_router
 from app.api.profiles import router as profiles_router
 from app.api.sites import router as sites_router
 from app.api.telemetry import router as telemetry_router
-from app.core.config import CORS_ALLOWED_ORIGINS
+from app.core.config import CORS_ALLOWED_ORIGINS, CORS_ALLOWED_ORIGIN_REGEX
 from app.db.database import Base, engine
 
 app = FastAPI(title="SolarSense API")
@@ -20,6 +20,7 @@ app = FastAPI(title="SolarSense API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_origin_regex=CORS_ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -23,6 +23,18 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
+# Optional regex for local/LAN development origins (e.g. http://192.168.x.x:5173).
+# Keep this configurable and override with CORS_ALLOWED_ORIGIN_REGEX when needed.
+_default_origin_regex = (
+    r"^https?://("
+    r"localhost|127\.0\.0\.1|0\.0\.0\.0|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+    r")(:\d+)?$"
+)
+CORS_ALLOWED_ORIGIN_REGEX = os.getenv("CORS_ALLOWED_ORIGIN_REGEX", _default_origin_regex).strip() or None
+
 # Supabase Storage Configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL", os.getenv("VITE_SUPABASE_URL", ""))
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", os.getenv("VITE_SUPABASE_PUBLISHABLE_KEY", ""))
