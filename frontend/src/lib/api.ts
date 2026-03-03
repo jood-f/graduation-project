@@ -33,7 +33,20 @@ function getResolvedBaseUrl(): string {
 const BASE_URL = getResolvedBaseUrl();
 
 function resolveUrl(path: string, baseUrl: string = BASE_URL): string {
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (typeof window === 'undefined') return path;
+    try {
+      const parsed = new URL(path);
+      const runtimeHost = window.location.hostname;
+      if (isLoopbackHost(parsed.hostname) && !isLoopbackHost(runtimeHost)) {
+        parsed.hostname = runtimeHost;
+        return parsed.toString();
+      }
+    } catch {
+      // Keep provided absolute URL unchanged if parsing fails.
+    }
+    return path;
+  }
   if (path.startsWith('/')) return `${baseUrl}${path}`;
   return `${baseUrl}/${path}`;
 }
@@ -56,14 +69,14 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   try {
     return await fetch(primaryUrl, requestInit);
   } catch (error) {
-    // Retry once with runtime host when configured API host is loopback.
+    // Retry once with runtime host when loopback hosts are unreachable from remote clients.
     if (typeof window !== 'undefined') {
       try {
-        const parsed = new URL(BASE_URL);
+        const parsed = new URL(primaryUrl);
         const runtimeHost = window.location.hostname;
         if (isLoopbackHost(parsed.hostname) && !isLoopbackHost(runtimeHost)) {
           parsed.hostname = runtimeHost;
-          const retryUrl = resolveUrl(path, normalizeBaseUrl(parsed.toString()));
+          const retryUrl = parsed.toString();
           return await fetch(retryUrl, requestInit);
         }
       } catch {
