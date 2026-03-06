@@ -94,6 +94,7 @@ export interface RunScanProgress {
   scanned_panels: number;
   panels_with_results: number;
   anomalies_found: number;
+  inspections_created: number;
   batches_processed: number;
 }
 
@@ -101,6 +102,7 @@ interface RunScanResult {
   panels_scanned: number;
   panels_with_results: number;
   anomalies_found: number;
+  inspections_created: number;
   total_panels: number;
   batches_processed: number;
 }
@@ -120,6 +122,7 @@ export function useRunMLAnomalyScan() {
       let scannedPanels = 0;
       let panelsWithResults = 0;
       let anomaliesFound = 0;
+      let inspectionsCreated = 0;
       let batchesProcessed = 0;
 
       while (true) {
@@ -136,6 +139,7 @@ export function useRunMLAnomalyScan() {
         scannedPanels += payload.batch_count ?? 0;
         panelsWithResults += payload.panels_with_results_batch ?? 0;
         anomaliesFound += payload.anomalies_detected_batch ?? 0;
+        inspectionsCreated += payload.inspections_created_batch ?? 0;
         batchesProcessed += 1;
 
         onProgress?.({
@@ -143,6 +147,7 @@ export function useRunMLAnomalyScan() {
           scanned_panels: scannedPanels,
           panels_with_results: panelsWithResults,
           anomalies_found: anomaliesFound,
+          inspections_created: inspectionsCreated,
           batches_processed: batchesProcessed,
         });
 
@@ -158,11 +163,13 @@ export function useRunMLAnomalyScan() {
         panels_scanned: scannedPanels,
         panels_with_results: panelsWithResults,
         anomalies_found: anomaliesFound,
+        inspections_created: inspectionsCreated,
         batches_processed: batchesProcessed,
       };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ml-anomalies-persisted'] });
+      queryClient.invalidateQueries({ queryKey: ['missions'] });
     },
   });
 }

@@ -51,9 +51,6 @@ export type Database = {
       }
       missions: {
         Row: {
-          approved_at: string | null
-          approved_by_name: string | null
-          approved_by_user_id: string | null
           created_at: string
           created_by_user_id: string
           id: string
@@ -63,9 +60,6 @@ export type Database = {
           status: string
         }
         Insert: {
-          approved_at?: string | null
-          approved_by_name?: string | null
-          approved_by_user_id?: string | null
           created_at?: string
           created_by_user_id: string
           id?: string
@@ -75,9 +69,6 @@ export type Database = {
           status?: string
         }
         Update: {
-          approved_at?: string | null
-          approved_by_name?: string | null
-          approved_by_user_id?: string | null
           created_at?: string
           created_by_user_id?: string
           id?: string

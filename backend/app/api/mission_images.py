@@ -216,6 +216,10 @@ def analyze_mission_image(
         if 'tmp_path' in locals() and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+    # Resolve panel_id from the mission
+    mission = db.query(Mission).filter(Mission.id == img.mission_id).first()
+    resolved_panel_id = mission.panel_id if mission else None
+
     # Store each detection as an inspection result
     inspection_results = []
     for detection in detections:
@@ -230,7 +234,7 @@ def analyze_mission_image(
         inspection = InspectionResult(
             mission_id=img.mission_id,
             mission_image_id=img.id,
-            panel_id=None,  # Can be linked later if panel detection is added
+            panel_id=resolved_panel_id,
             status=status,
             defect_type=class_name,
             confidence=detection["confidence"],
@@ -311,6 +315,10 @@ def reanalyze_mission_image(
         if 'tmp_path' in locals() and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+    # Resolve panel_id from the mission
+    mission = db.query(Mission).filter(Mission.id == img.mission_id).first()
+    resolved_panel_id = mission.panel_id if mission else None
+
     inspection_results = []
     for detection in detections:
         class_name = detection["class_name"]
@@ -323,7 +331,7 @@ def reanalyze_mission_image(
         inspection = InspectionResult(
             mission_id=img.mission_id,
             mission_image_id=img.id,
-            panel_id=None,
+            panel_id=resolved_panel_id,
             status=status,
             defect_type=class_name,
             confidence=detection["confidence"],

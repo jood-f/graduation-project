@@ -6,10 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
+from app.models.fault import Fault
+from app.models.mission import Mission
 from app.models.panel import Panel
 from app.models.telemetry import Telemetry
 from app.schemas.telemetry import TelemetryCreate, TelemetryOut
 from app.security import AuthUser, get_current_user, require_roles
+
+logger = __import__("logging").getLogger(__name__)
 
 
 # Lazily import the telemetry model service to avoid requiring heavy ML
@@ -108,6 +112,26 @@ def _persist_prediction_metrics(
         db.commit()
 
     return updated
+
+
+def _auto_create_inspection(db: Session, panel_id: uuid.UUID) -> bool:
+    """
+    Auto-create an OPEN inspection for a panel if one doesn't already exist.
+    Returns True if a new inspection was created.
+    """
+    existing = (
+        db.query(Mission)
+        .filter(Mission.panel_id == panel_id, Mission.status == "OPEN")
+        .first()
+    )
+    if existing:
+        return False
+
+    mission = Mission(panel_id=panel_id, status="OPEN")
+    db.add(mission)
+    db.commit()
+    logger.info("Auto-created inspection for panel %s due to ML anomalies", panel_id)
+    return True
 
 
 def _analyze_panel_telemetry(
@@ -212,6 +236,28 @@ def _analyze_panel_telemetry(
         anomaly_by_timestamp=anomaly_by_timestamp,
     )
 
+    # Persist anomalies to faults table for unified fault tracking
+    faults_created = 0
+    if len(anomaly_by_timestamp) > 0:
+        for pred in predictions:
+            severity = anomaly_by_timestamp.get(pred["timestamp"])
+            if severity is None:
+                continue
+            fault = Fault(
+                panel_id=panel_id,
+                fault_type=f"ML_POWER_ANOMALY_{severity.upper()}",
+                confidence=round(1.0 - (pred["error_percent"] or 0) / 100, 4)
+                    if pred.get("error_percent") is not None else 0.5,
+            )
+            db.add(fault)
+            faults_created += 1
+        db.commit()
+
+    # Auto-create an inspection for this panel when anomalies are found
+    inspection_created = False
+    if len(anomaly_by_timestamp) > 0:
+        inspection_created = _auto_create_inspection(db, panel_id)
+
     return {
         **base,
         "status": "ok",
@@ -219,6 +265,8 @@ def _analyze_panel_telemetry(
         "anomalies_detected": len(anomaly_by_timestamp),
         "persisted_to_telemetry_rows": persisted_rows,
         "persisted_anomaly_rows": len(anomaly_by_timestamp),
+        "faults_created": faults_created,
+        "inspection_created": inspection_created,
         "anomalies": anomalies if include_anomaly_details else None,
     }
 
@@ -358,6 +406,7 @@ def scan_all_panels_for_anomalies(
     scanned: list[dict] = []
     anomalies_detected_batch = 0
     panels_with_results_batch = 0
+    inspections_created_batch = 0
 
     for (panel_id,) in panel_rows:
         result = _analyze_panel_telemetry(
@@ -372,6 +421,8 @@ def scan_all_panels_for_anomalies(
         if result["status"] == "ok":
             panels_with_results_batch += 1
             anomalies_detected_batch += result["anomalies_detected"]
+            if result.get("inspection_created"):
+                inspections_created_batch += 1
 
     processed = offset + len(panel_rows)
     next_offset = processed if processed < total_panels else None
@@ -384,6 +435,7 @@ def scan_all_panels_for_anomalies(
         "next_offset": next_offset,
         "panels_with_results_batch": panels_with_results_batch,
         "anomalies_detected_batch": anomalies_detected_batch,
+        "inspections_created_batch": inspections_created_batch,
         "scanned": scanned,
     }
 

@@ -15,9 +15,6 @@ export interface Mission {
   panel_label: string;
   site_name: string;
   status: string;
-  approved_by_user_id: string | null;
-  approved_by_name: string | null;
-  approved_at: string | null;
   created_at: string;
   created_by_user_id?: string | null;
 }
@@ -26,8 +23,6 @@ interface MissionRow {
   id: string;
   panel_id: string;
   status: string;
-  approved_by_user_id: string | null;
-  approved_at: string | null;
   created_at: string;
   panels: {
     label: string | null;
@@ -66,8 +61,6 @@ export function useMissions() {
           id,
           panel_id,
           status,
-          approved_by_user_id,
-          approved_at,
           created_at,
           panels (
             label,
@@ -81,9 +74,6 @@ export function useMissions() {
         id: row.id,
         panel_id: row.panel_id,
         status: normalizeMissionStatus(row.status),
-        approved_by_user_id: row.approved_by_user_id,
-        approved_by_name: null,
-        approved_at: row.approved_at,
         created_at: row.created_at,
         panel_label: row.panels?.label || 'Unknown Panel',
         site_name: row.panels?.sites?.name || 'Unknown Site',
