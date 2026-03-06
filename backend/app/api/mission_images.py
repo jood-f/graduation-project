@@ -48,33 +48,28 @@ def _run_cv_detection_with_fallback(
     image_id: uuid.UUID,
 ) -> List[dict]:
     """
-    Run CV detection with fallback thresholds when the first pass returns no detections.
+    Run CV detection with the requested threshold only (no aggressive fallback
+    to lower thresholds, which caused false-positive misclassifications).
     """
-    first_threshold = max(0.0, min(1.0, float(requested_threshold)))
-    thresholds = [round(first_threshold, 2)]
+    threshold = max(0.0, min(1.0, float(requested_threshold)))
 
-    for candidate in (0.35, 0.2):
-        if candidate < first_threshold and candidate not in thresholds:
-            thresholds.append(candidate)
-
-    for threshold in thresholds:
-        detections = cv_service.detect(image_path, threshold)
-        logger.info(
-            "CV detection pass image_id=%s threshold=%.2f detections=%s",
-            image_id,
-            threshold,
-            len(detections),
-        )
-
-        if detections:
-            for detection in detections:
-                detection["used_confidence_threshold"] = threshold
-            return detections
-
-    logger.warning(
-        "CV detection returned no results after fallback image_id=%s thresholds=%s",
+    detections = cv_service.detect(image_path, threshold)
+    logger.info(
+        "CV detection image_id=%s threshold=%.2f detections=%s",
         image_id,
-        thresholds,
+        threshold,
+        len(detections),
+    )
+
+    if detections:
+        for detection in detections:
+            detection["used_confidence_threshold"] = threshold
+        return detections
+
+    logger.info(
+        "CV detection returned no results for image_id=%s at threshold=%.2f",
+        image_id,
+        threshold,
     )
     return []
 
@@ -124,7 +119,7 @@ def _download_image_from_storage(storage_path: str, tmp_path: str) -> None:
 def create_mission_image(
     payload: MissionImageCreate,
     db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
     # Ensure mission exists
     mission = db.query(Mission).filter(Mission.id == payload.mission_id).first()
@@ -402,20 +397,20 @@ def get_image_analysis_results(
 def delete_mission_image(
     image_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
     img = db.query(MissionImage).filter(MissionImage.id == image_id).first()
     if not img:
         raise HTTPException(status_code=404, detail="Mission image not found")
 
-    # Allow deletion only while mission is in-flight
+    # Allow deletion only while inspection is open
     mission = db.query(Mission).filter(Mission.id == img.mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found for this image")
-    if mission and mission.status != 'IN_FLIGHT':
+    if mission and mission.status not in ('OPEN', 'IN_FLIGHT', 'APPROVED'):
         raise HTTPException(
             status_code=400,
-            detail="Image deletion is allowed only while mission status is IN_FLIGHT",
+            detail="Image deletion is allowed only while the inspection is open",
         )
 
     # Attempt to delete storage object (best-effort)

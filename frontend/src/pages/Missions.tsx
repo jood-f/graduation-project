@@ -19,31 +19,25 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plane, Clock, CheckCircle, XCircle, Eye, ThumbsUp, Upload, Play, Plus } from 'lucide-react';
+import { Camera, Clock, CheckCircle, Eye, Upload, Plus } from 'lucide-react';
 import { useSites } from '@/hooks/useSites';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMissions, useApproveMission, useUpdateMissionStatus, type Mission } from '@/hooks/useMissions';
+import { useMissions, useUpdateMissionStatus, type Mission } from '@/hooks/useMissions';
 import { MissionImageUpload } from '@/components/missions/MissionImageUpload';
 import { MissionDetailDialog } from '@/components/missions/MissionDetailDialog';
 import { CreateMissionDialog } from '@/components/missions/CreateMissionDialog';
 
-type MissionStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
+type MissionStatus = 'OPEN' | 'COMPLETED';
 
 const statusStyles: Record<MissionStatus, string> = {
-  PENDING_APPROVAL: 'bg-warning/10 text-warning border-warning/20',
-  APPROVED: 'bg-info/10 text-info border-info/20',
-  IN_FLIGHT: 'bg-primary/10 text-primary border-primary/20',
+  OPEN: 'bg-info/10 text-info border-info/20',
   COMPLETED: 'bg-success/10 text-success border-success/20',
-  CANCELLED: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
 const statusIcons: Record<MissionStatus, React.ElementType> = {
-  PENDING_APPROVAL: Clock,
-  APPROVED: CheckCircle,
-  IN_FLIGHT: Plane,
+  OPEN: Clock,
   COMPLETED: CheckCircle,
-  CANCELLED: XCircle,
 };
 
 export default function Missions() {
@@ -56,15 +50,9 @@ export default function Missions() {
 
   const { data: missions, isLoading } = useMissions();
   const { data: sites } = useSites();
-  const approveMutation = useApproveMission();
   const updateStatusMutation = useUpdateMissionStatus();
 
-  // Drone team and admin can approve missions
-  const canApprove = hasRole(['admin', 'drone_team']);
-  // Only drone_team can upload images (after they approved and mission is in flight or completed)
-  const canUploadImages = hasRole(['admin', 'drone_team']);
-  // Operators and admins can create missions
-  const canCreateMission = hasRole(['admin', 'operator']);
+  const canManage = hasRole(['admin', 'operator']);
 
   const filteredMissions = useMemo(() => {
     if (!missions) return [];
@@ -75,36 +63,21 @@ export default function Missions() {
     });
   }, [missions, statusFilter, siteFilter, sites]);
 
-  const canUploadForMission = (mission: Mission) =>
-    canUploadImages && (mission.status === 'APPROVED' || mission.status === 'IN_FLIGHT');
-
-  const handleApprove = (mission: Mission) => {
-    approveMutation.mutate(mission.id);
-  };
-
-  const handleReject = (mission: Mission) => {
-    updateStatusMutation.mutate({ missionId: mission.id, status: 'CANCELLED' });
-  };
-
-  const handleStartFlight = (mission: Mission) => {
-    updateStatusMutation.mutate({ missionId: mission.id, status: 'IN_FLIGHT' });
-  };
-
   const handleCompleteMission = (mission: Mission) => {
     updateStatusMutation.mutate({ missionId: mission.id, status: 'COMPLETED' });
   };
 
   return (
-    <MainLayout title="Drone Missions">
+    <MainLayout title="Inspections">
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>All Missions ({filteredMissions.length})</CardTitle>
+            <CardTitle>All Inspections ({filteredMissions.length})</CardTitle>
             <div className="flex flex-wrap gap-2">
-              {canCreateMission && (
+              {canManage && (
                 <Button onClick={() => setCreateDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Create Mission
+                  New Inspection
                 </Button>
               )}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -113,11 +86,8 @@ export default function Missions() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
-                  <SelectItem value="APPROVED">Approved</SelectItem>
-                  <SelectItem value="IN_FLIGHT">In Flight</SelectItem>
+                  <SelectItem value="OPEN">Open</SelectItem>
                   <SelectItem value="COMPLETED">Completed</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={siteFilter} onValueChange={setSiteFilter}>
@@ -147,11 +117,10 @@ export default function Missions() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mission ID</TableHead>
+                  <TableHead>Inspection ID</TableHead>
                   <TableHead>Panel</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Approved By</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -169,58 +138,16 @@ export default function Missions() {
                       <TableCell>
                         <Badge className={cn('gap-1', statusStyles[mission.status as MissionStatus] || '')}>
                           <StatusIcon className="h-3 w-3" />
-                          {mission.status.replace('_', ' ')}
+                          {mission.status === 'OPEN' ? 'Open' : mission.status === 'COMPLETED' ? 'Completed' : mission.status.replace('_', ' ')}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {mission.approved_by_name || (
-                          <span className="text-muted-foreground">—</span>
-                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {new Date(mission.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          {/* Approve button - only for PENDING_APPROVAL and drone_team/admin */}
-                          {mission.status === 'PENDING_APPROVAL' && canApprove && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Approve Mission"
-                                onClick={() => handleApprove(mission)}
-                                disabled={approveMutation.isPending || updateStatusMutation.isPending}
-                              >
-                                <ThumbsUp className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Reject Mission"
-                                onClick={() => handleReject(mission)}
-                                disabled={approveMutation.isPending || updateStatusMutation.isPending}
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-
-                          {/* Start Flight button - only for APPROVED and drone_team/admin */}
-                          {mission.status === 'APPROVED' && canApprove && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Start Flight"
-                              onClick={() => handleStartFlight(mission)}
-                              disabled={updateStatusMutation.isPending}
-                            >
-                              <Play className="h-4 w-4" />
-                            </Button>
-                          )}
-
-                          {/* Upload is allowed only after approval and before completion */}
-                          {mission.status === 'APPROVED' && canUploadForMission(mission) && (
+                          {/* Upload images - only for OPEN inspections */}
+                          {mission.status === 'OPEN' && canManage && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -231,27 +158,17 @@ export default function Missions() {
                             </Button>
                           )}
 
-                          {/* Complete & Upload button - only for IN_FLIGHT */}
-                          {mission.status === 'IN_FLIGHT' && canUploadForMission(mission) && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Complete Mission"
-                                onClick={() => handleCompleteMission(mission)}
-                                disabled={updateStatusMutation.isPending}
-                              >
-                                <CheckCircle className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Upload Images"
-                                onClick={() => setUploadMission(mission)}
-                              >
-                                <Upload className="h-4 w-4" />
-                              </Button>
-                            </>
+                          {/* Complete inspection */}
+                          {mission.status === 'OPEN' && canManage && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Complete Inspection"
+                              onClick={() => handleCompleteMission(mission)}
+                              disabled={updateStatusMutation.isPending}
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </Button>
                           )}
 
                           {/* View button - everyone */}
@@ -273,7 +190,7 @@ export default function Missions() {
           )}
           {!isLoading && filteredMissions.length === 0 && (
             <p className="py-8 text-center text-muted-foreground">
-              No missions found matching your criteria
+              No inspections found matching your criteria
             </p>
           )}
         </CardContent>
@@ -283,7 +200,7 @@ export default function Missions() {
       <MissionDetailDialog
         mission={selectedMission}
         open={!!selectedMission}
-        canDeleteImages={canUploadImages}
+        canDeleteImages={canManage}
         onOpenChange={(open) => !open && setSelectedMission(null)}
       />
 

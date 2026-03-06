@@ -15,6 +15,8 @@ class FaultOut(BaseModel):
     fault_type: str
     confidence: float
     detected_at: datetime
+    panel_label: str | None = None
+    site_name: str | None = None
 
     class Config:
         from_attributes = True

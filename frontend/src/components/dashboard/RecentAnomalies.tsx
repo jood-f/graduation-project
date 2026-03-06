@@ -1,8 +1,9 @@
+import { useMemo } from 'react';
 import { AlertTriangle, Thermometer, Zap, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useFaults } from '@/hooks/useFaults';
+import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { cn } from '@/lib/utils';
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -68,9 +69,32 @@ function FaultItem({ fault }: FaultItemProps) {
 }
 
 export function RecentAnomalies() {
-  const { data: faults, isLoading, error } = useFaults();
-  
-  const recentFaults = (faults || []).slice(0, 3);
+  const { data: faults, isLoading: mlLoading } = useFaults();
+  const { data: cvAnomalies, isLoading: cvLoading } = useCVAnomalies();
+
+  const isLoading = mlLoading || cvLoading;
+
+  const recentItems = useMemo(() => {
+    const mlItems = (faults || []).map((f) => ({
+      id: `ml-${f.id}`,
+      panel_label: f.panel_label,
+      site_name: f.site_name,
+      fault_type: f.fault_type,
+      confidence: f.confidence,
+      detected_at: f.detected_at,
+    }));
+    const cvItems = (cvAnomalies || []).map((c) => ({
+      id: `cv-${c.id}`,
+      panel_label: c.panel_label,
+      site_name: c.site_name,
+      fault_type: c.defect_type,
+      confidence: c.confidence,
+      detected_at: c.inspected_at,
+    }));
+    return [...mlItems, ...cvItems]
+      .sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime())
+      .slice(0, 3);
+  }, [faults, cvAnomalies]);
 
   if (isLoading) {
     return (
@@ -92,13 +116,13 @@ export function RecentAnomalies() {
         <CardTitle>Recent Anomalies</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {recentFaults.length === 0 ? (
+        {recentItems.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-4">
             No anomalies detected
           </p>
         ) : (
-          recentFaults.map(fault => (
-            <FaultItem key={fault.id} fault={fault} />
+          recentItems.map(item => (
+            <FaultItem key={item.id} fault={item} />
           ))
         )}
       </CardContent>

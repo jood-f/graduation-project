@@ -67,9 +67,9 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Request New Mission</DialogTitle>
+          <DialogTitle>New Inspection</DialogTitle>
           <DialogDescription>
-            Create a new drone inspection mission. It will be sent for approval by the drone team.
+            Create a new inspection. Select a site and panel, then upload images for analysis.
           </DialogDescription>
         </DialogHeader>
 
@@ -154,7 +154,7 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
                     Creating...
                   </>
                 ) : (
-                  sitesLoading || panelsLoading ? 'Loading...' : 'Create Mission'
+                  sitesLoading || panelsLoading ? 'Loading...' : 'Create Inspection'
                 )}
               </Button>
             </DialogFooter>

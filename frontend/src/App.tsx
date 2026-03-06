@@ -45,9 +45,9 @@ const App = () => (
                   <Anomalies />
                 </RoleBasedRoute>
               } />
-              {/* Missions: All roles can view, but with different permissions */}
+              {/* Missions: Admin and Operator */}
               <Route path="/missions" element={
-                <RoleBasedRoute allowedRoles={['admin', 'operator', 'drone_team']}>
+                <RoleBasedRoute allowedRoles={['admin', 'operator']}>
                   <Missions />
                 </RoleBasedRoute>
               } />

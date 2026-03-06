@@ -41,7 +41,7 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null
   // Normalize role to expected format: lowercase with underscores
   const normalizeRole = (r: string): UserRole => {
     const normalized = r.toLowerCase().replace(/\s+/g, '_');
-    if (['admin', 'operator', 'drone_team'].includes(normalized)) {
+    if (['admin', 'operator'].includes(normalized)) {
       return normalized as UserRole;
     }
     return 'operator';

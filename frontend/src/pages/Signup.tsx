@@ -18,7 +18,7 @@ const signupSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string(),
-  role: z.enum(['Admin', 'Operator', 'Drone Team'], {
+  role: z.enum(['Admin', 'Operator'], {
     errorMap: () => ({ message: 'Please select a valid role' }),
   }),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -157,8 +157,7 @@ export default function Signup() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Operator">Operator - View pages and request missions</SelectItem>
-                        <SelectItem value="Drone Team">Drone Team - View and approve missions</SelectItem>
+                        <SelectItem value="Operator">Operator - Full access to panels, anomalies, and missions</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

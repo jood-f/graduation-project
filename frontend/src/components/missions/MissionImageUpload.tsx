@@ -99,9 +99,9 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upload Mission Images</DialogTitle>
+          <DialogTitle>Upload Images for Analysis</DialogTitle>
           <DialogDescription>
-            Upload drone inspection images for mission: {missionLabel}
+            Upload panel images for inspection: {missionLabel}
           </DialogDescription>
         </DialogHeader>
 

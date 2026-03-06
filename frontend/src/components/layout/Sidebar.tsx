@@ -3,7 +3,7 @@ import {
   LayoutDashboard, 
   Zap, 
   AlertTriangle, 
-  Plane, 
+  Camera, 
   User,
   Shield
 } from 'lucide-react';
@@ -13,12 +13,12 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import logo from '@/assets/SolarSense_Logo.png';
 
 const navItems = [
-  { path: '/', label: 'Overview', icon: LayoutDashboard, roles: ['admin', 'operator', 'drone_team'] },
+  { path: '/', label: 'Overview', icon: LayoutDashboard, roles: ['admin', 'operator'] },
   { path: '/panels', label: 'Panels', icon: Zap, roles: ['admin', 'operator'] },
   { path: '/anomalies', label: 'Anomalies', icon: AlertTriangle, roles: ['admin', 'operator'] },
-  { path: '/missions', label: 'Drone Missions', icon: Plane, roles: ['admin', 'operator', 'drone_team'] },
+  { path: '/missions', label: 'Inspections', icon: Camera, roles: ['admin', 'operator'] },
   { path: '/admin', label: 'Admin Panel', icon: Shield, roles: ['admin'] },
-  { path: '/profile', label: 'Profile', icon: User, roles: ['admin', 'operator', 'drone_team'] },
+  { path: '/profile', label: 'Profile', icon: User, roles: ['admin', 'operator'] },
 ];
 
 interface SidebarProps {

@@ -5,17 +5,19 @@ from datetime import datetime
 from typing import Literal, Optional
 
 MissionStatus = Literal[
+    "OPEN",
+    "COMPLETED",
+    # Legacy statuses kept for backward compatibility with existing data
     "PENDING_APPROVAL",
     "APPROVED",
     "IN_FLIGHT",
-    "COMPLETED",
     "CANCELLED",
 ]
 
 
 class MissionCreate(BaseModel):
     panel_id: UUID
-    status: MissionStatus = "PENDING_APPROVAL"
+    status: MissionStatus = "OPEN"
 
 
 class MissionOut(BaseModel):

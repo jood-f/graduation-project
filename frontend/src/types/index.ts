@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'operator' | 'drone_team';
+export type UserRole = 'admin' | 'operator';
 
 export interface User {
   id: string;
@@ -59,7 +59,7 @@ export interface Anomaly {
   message: string;
 }
 
-export type MissionStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'IN_FLIGHT' | 'COMPLETED' | 'CANCELLED';
+export type MissionStatus = 'OPEN' | 'COMPLETED';
 
 export interface Mission {
   id: string;
@@ -67,9 +67,6 @@ export interface Mission {
   panelLabel: string;
   siteName: string;
   status: MissionStatus;
-  approvedByUserId?: string;
-  approvedByName?: string;
-  approvedAt?: string;
   createdAt: string;
 }
 
@@ -103,6 +100,6 @@ export interface DashboardStats {
   faultPanels: number;
   totalSites: number;
   openAnomalies: number;
-  pendingMissions: number;
+  openInspections: number;
   avgPowerOutput: number;
 }

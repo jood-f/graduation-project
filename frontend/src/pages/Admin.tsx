@@ -28,20 +28,17 @@ interface AdminUsersResponse {
     total_users: number;
     admins: number;
     operators: number;
-    drone_team: number;
   };
 }
 
 const roleColors: Record<UserRole, string> = {
   admin: 'bg-destructive text-destructive-foreground',
   operator: 'bg-primary text-primary-foreground',
-  drone_team: 'bg-accent text-accent-foreground',
 };
 
 const roleLabels: Record<UserRole, string> = {
   admin: 'Admin',
   operator: 'Operator',
-  drone_team: 'Drone Team',
 };
 
 export default function Admin() {
@@ -79,7 +76,6 @@ export default function Admin() {
     total_users: 0,
     admins: 0,
     operators: 0,
-    drone_team: 0,
   };
 
   const updateRoleMutation = useMutation({
@@ -221,7 +217,6 @@ export default function Admin() {
                           <SelectContent>
                             <SelectItem value="admin">Admin</SelectItem>
                             <SelectItem value="operator">Operator</SelectItem>
-                            <SelectItem value="drone_team">Drone Team</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>

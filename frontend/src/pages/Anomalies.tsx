@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -19,12 +18,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
-import { useFaults } from '@/hooks/useFaults';
-import { useMLAnomalies, useRunMLAnomalyScan, type RunScanProgress } from '@/hooks/useMLAnomalies';
+import { AlertTriangle } from 'lucide-react';
+import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { useSites } from '@/hooks/useSites';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 
 type Severity = 'LOW' | 'MED' | 'HIGH';
 type ModelType = 'ML' | 'CV';
@@ -48,28 +45,10 @@ interface CombinedAnomaly {
   severity: Severity;
   model: ModelType;
   detected_at: string;
-  actual_power: number | null;
-  predicted_power: number | null;
   confidence: number | null;
-  error: number | null;
-  error_percent: number | null;
 }
 
-function formatPower(value: number | null): string {
-  if (value == null) return '-';
-  return `${Math.abs(value) < 1 ? value.toFixed(4) : value.toFixed(2)} W`;
-}
-
-function formatError(error: number | null, errorPercent: number | null): string {
-  if (error == null) return '-';
-  const errorText = `${Math.abs(error) < 1 ? error.toFixed(4) : error.toFixed(2)} W`;
-  if (errorPercent == null) {
-    return `${errorText} (N/A at low actual power)`;
-  }
-  return `${errorText} (${errorPercent.toFixed(2)}%)`;
-}
-
-function getCvSeverity(confidence: number): Severity {
+function getSeverity(confidence: number): Severity {
   if (confidence >= 0.85) return 'HIGH';
   if (confidence >= 0.7) return 'MED';
   return 'LOW';
@@ -79,69 +58,38 @@ export default function Anomalies() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
-  const [scanProgress, setScanProgress] = useState<RunScanProgress | null>(null);
 
-  const { data: anomalies, isLoading: mlLoading } = useMLAnomalies();
-  const { data: faults, isLoading: cvLoading } = useFaults();
-  const runScan = useRunMLAnomalyScan();
+  const { data: faults, isLoading: mlLoading } = useFaults();
+  const { data: cvAnomalies, isLoading: cvLoading } = useCVAnomalies();
   const { data: sites } = useSites();
 
-  const handleScanAllPanels = () => {
-    runScan.mutate(
-      {
-        threshold: 5,
-        hours: 168,
-        batchSize: 20,
-        onProgress: (progress) => setScanProgress(progress),
-      },
-      {
-        onSuccess: (result) => {
-          toast.success(
-            `ML scan finished: ${result.anomalies_found} anomaly(s) across ${result.panels_scanned}/${result.total_panels} panels`
-          );
-        },
-        onError: (error) => {
-          toast.error(`ML scan failed: ${(error as Error).message}`);
-        },
-      }
-    );
-  };
-
   const allAnomalies = useMemo<CombinedAnomaly[]>(() => {
-    const mlRows: CombinedAnomaly[] = (anomalies || []).map((item) => ({
-      id: `ml-${item.id}`,
-      panel_label: item.panel_label,
-      site_name: item.site_name,
-      anomaly_type: item.anomaly_type,
-      severity: item.severity,
-      model: 'ML',
-      detected_at: item.analyzed_at || item.timestamp,
-      actual_power: item.actual_power,
-      predicted_power: item.predicted_power,
-      confidence: null,
-      error: item.error,
-      error_percent: item.error_percent,
-    }));
-
-    const cvRows: CombinedAnomaly[] = (faults || []).map((fault) => ({
-      id: `cv-${fault.id}`,
+    const mlRows: CombinedAnomaly[] = (faults || []).map((fault) => ({
+      id: `ml-${fault.id}`,
       panel_label: fault.panel_label || 'Unknown',
       site_name: fault.site_name || 'Unknown Site',
       anomaly_type: fault.fault_type,
-      severity: getCvSeverity(fault.confidence),
-      model: 'CV',
+      severity: getSeverity(fault.confidence),
+      model: 'ML',
       detected_at: fault.detected_at,
-      actual_power: null,
-      predicted_power: null,
       confidence: fault.confidence,
-      error: null,
-      error_percent: null,
+    }));
+
+    const cvRows: CombinedAnomaly[] = (cvAnomalies || []).map((item) => ({
+      id: `cv-${item.id}`,
+      panel_label: item.panel_label || 'Unknown',
+      site_name: item.site_name || 'Unknown Site',
+      anomaly_type: item.defect_type,
+      severity: getSeverity(item.confidence),
+      model: 'CV',
+      detected_at: item.inspected_at,
+      confidence: item.confidence,
     }));
 
     return [...mlRows, ...cvRows].sort(
       (a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime()
     );
-  }, [anomalies, faults]);
+  }, [faults, cvAnomalies]);
 
   const filteredAnomalies = useMemo(() => {
     return allAnomalies.filter((item) => {
@@ -162,14 +110,6 @@ export default function Anomalies() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Detected Anomalies ({filteredAnomalies.length})</CardTitle>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={handleScanAllPanels}
-                disabled={runScan.isPending}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${runScan.isPending ? 'animate-spin' : ''}`} />
-                {runScan.isPending ? 'Scanning...' : 'Run ML Scan'}
-              </Button>
               <Select value={modelFilter} onValueChange={setModelFilter}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="All Models" />
@@ -206,12 +146,6 @@ export default function Anomalies() {
               </Select>
             </div>
           </div>
-          {runScan.isPending && (
-            <p className="text-sm text-muted-foreground">
-              Scanning all panels with ML model... {scanProgress?.scanned_panels || 0}/
-              {scanProgress?.total_panels || '...'}
-            </p>
-          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -228,12 +162,9 @@ export default function Anomalies() {
                   <TableHead>Panel</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Model</TableHead>
-                  <TableHead>Actual</TableHead>
-                  <TableHead>Predicted</TableHead>
                   <TableHead>Confidence</TableHead>
-                  <TableHead>Error</TableHead>
                   <TableHead>Severity</TableHead>
-                  <TableHead>Analyzed</TableHead>
+                  <TableHead>Detected</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -253,16 +184,7 @@ export default function Anomalies() {
                         <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
                       </TableCell>
                       <TableCell>
-                        {item.model === 'ML' ? formatPower(item.actual_power) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {item.model === 'ML' ? formatPower(item.predicted_power) : '-'}
-                      </TableCell>
-                      <TableCell>
                         {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}%` : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {formatError(item.error, item.error_percent)}
                       </TableCell>
                       <TableCell>
                         <Badge className={cn(severityStyles[severity])}>{severity}</Badge>

@@ -122,7 +122,7 @@ export const mockMissions: Mission[] = [
     panelId: 'panel-005',
     panelLabel: 'A2-002',
     siteName: 'Desert Sun Farm',
-    status: 'PENDING_APPROVAL',
+    status: 'OPEN',
     createdAt: '2026-01-17T07:00:00Z',
   },
   {
@@ -130,10 +130,7 @@ export const mockMissions: Mission[] = [
     panelId: 'panel-003',
     panelLabel: 'A1-003',
     siteName: 'Desert Sun Farm',
-    status: 'APPROVED',
-    approvedByUserId: 'user-drone-001',
-    approvedByName: 'Sarah Chen',
-    approvedAt: '2026-01-16T15:30:00Z',
+    status: 'OPEN',
     createdAt: '2026-01-16T10:00:00Z',
   },
   {
@@ -142,9 +139,6 @@ export const mockMissions: Mission[] = [
     panelLabel: 'B2-001',
     siteName: 'Valley Solar Park',
     status: 'COMPLETED',
-    approvedByUserId: 'user-drone-002',
-    approvedByName: 'Mike Torres',
-    approvedAt: '2026-01-14T09:00:00Z',
     createdAt: '2026-01-13T16:00:00Z',
   },
   {
@@ -152,10 +146,7 @@ export const mockMissions: Mission[] = [
     panelId: 'panel-001',
     panelLabel: 'A1-001',
     siteName: 'Desert Sun Farm',
-    status: 'IN_FLIGHT',
-    approvedByUserId: 'user-drone-001',
-    approvedByName: 'Sarah Chen',
-    approvedAt: '2026-01-17T08:00:00Z',
+    status: 'OPEN',
     createdAt: '2026-01-17T06:30:00Z',
   },
 ];
@@ -256,6 +247,6 @@ export const mockDashboardStats: DashboardStats = {
   faultPanels: mockPanels.filter(p => p.status === 'FAULT').length,
   totalSites: mockSites.length,
   openAnomalies: mockAnomalies.filter(a => a.status === 'OPEN').length,
-  pendingMissions: mockMissions.filter(m => m.status === 'PENDING_APPROVAL').length,
+  openInspections: mockMissions.filter(m => m.status === 'OPEN').length,
   avgPowerOutput: 342.5,
 };

@@ -9,7 +9,7 @@ from app.db.deps import get_db
 from app.models.profile import Profile
 
 
-VALID_ROLES = {"admin", "operator", "drone_team"}
+VALID_ROLES = {"admin", "operator"}
 
 
 @dataclass(frozen=True)

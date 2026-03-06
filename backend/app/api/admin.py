@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.deps import get_db
 from app.models.profile import Profile
 
-UserRole = Literal["admin", "operator", "drone_team"]
+UserRole = Literal["admin", "operator"]
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
 
@@ -81,7 +81,6 @@ def list_users(
         "total_users": len(users),
         "admins": sum(1 for u in users if u["role"] == "admin"),
         "operators": sum(1 for u in users if u["role"] == "operator"),
-        "drone_team": sum(1 for u in users if u["role"] == "drone_team"),
     }
 
     return {

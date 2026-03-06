@@ -7,8 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePanels, type Panel } from '@/hooks/usePanels';
 import { useSites } from '@/hooks/useSites';
-import { useFaults } from '@/hooks/useFaults';
-import { useMLAnomalies } from '@/hooks/useMLAnomalies';
+import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { supabase } from '@/integrations/supabase/client';
 import { Activity, AlertTriangle, MapPin, Zap, Filter } from 'lucide-react';
 
@@ -41,7 +40,7 @@ export function PanelHeatmap() {
   const { data: panels, isLoading: panelsLoading } = usePanels();
   const { data: sites } = useSites();
   const { data: faults } = useFaults();
-  const { data: mlAnomalies } = useMLAnomalies();
+  const { data: cvAnomalies } = useCVAnomalies();
 
   const filteredPanels = useMemo(() => {
     return (panels || []).filter((panel) => {
@@ -70,11 +69,11 @@ export function PanelHeatmap() {
         fault.confidence >= 0.85 ? 'HIGH' : fault.confidence >= 0.7 ? 'MED' : 'LOW';
 
       const item: PanelAnomaly = {
-        id: `cv-${fault.id}`,
-        source: 'CV',
+        id: `ml-${fault.id}`,
+        source: 'ML',
         type: fault.fault_type,
         severity,
-        message: `CV detected ${fault.fault_type} (${Math.round(fault.confidence * 100)}% confidence)`,
+        message: `ML detected ${fault.fault_type} (${Math.round(fault.confidence * 100)}% confidence)`,
         detected_at: fault.detected_at,
       };
 
@@ -83,24 +82,17 @@ export function PanelHeatmap() {
       map.set(fault.panel_id, existing);
     });
 
-    (mlAnomalies || []).forEach((anomaly) => {
-      const errorText = anomaly.error != null
-        ? `${Math.abs(anomaly.error) < 1 ? anomaly.error.toFixed(4) : anomaly.error.toFixed(2)}W`
-        : null;
-      const errorPercentText = anomaly.error_percent != null
-        ? `${anomaly.error_percent.toFixed(2)}%`
-        : 'N/A at low actual power';
+    (cvAnomalies || []).forEach((anomaly) => {
+      const severity: 'LOW' | 'MED' | 'HIGH' =
+        anomaly.confidence >= 0.85 ? 'HIGH' : anomaly.confidence >= 0.7 ? 'MED' : 'LOW';
 
       const item: PanelAnomaly = {
-        id: `ml-${anomaly.id}`,
-        source: 'ML',
-        type: anomaly.anomaly_type,
-        severity: anomaly.severity,
-        message:
-          errorText
-            ? `ML error ${errorText} (${errorPercentText})`
-            : 'ML anomaly detected',
-        detected_at: anomaly.analyzed_at || anomaly.timestamp,
+        id: `cv-${anomaly.id}`,
+        source: 'CV',
+        type: anomaly.defect_type,
+        severity,
+        message: `CV detected ${anomaly.defect_type} (${Math.round(anomaly.confidence * 100)}% confidence)`,
+        detected_at: anomaly.inspected_at,
       };
 
       const existing = map.get(anomaly.panel_id) || [];
@@ -114,7 +106,7 @@ export function PanelHeatmap() {
     });
 
     return map;
-  }, [faults, mlAnomalies]);
+  }, [faults, cvAnomalies]);
 
   const { data: latestTelemetry, isLoading: telemetryLoading } = useQuery({
     queryKey: ['panel-latest-telemetry', selectedPanel?.id],

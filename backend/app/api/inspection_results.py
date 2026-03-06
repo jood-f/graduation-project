@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/inspection-results", tags=["Inspection Result
 def create_inspection_result(
     payload: InspectionResultCreate,
     db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
     row = InspectionResult(
         mission_id=payload.mission_id,
@@ -151,7 +151,7 @@ def update_inspection_result(
     inspection_id: uuid.UUID,
     payload: InspectionResultUpdate,
     db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
     row = db.query(InspectionResult).filter(InspectionResult.id == inspection_id).first()
     if not row:

@@ -36,7 +36,9 @@ interface MissionRow {
 }
 
 const normalizeMissionStatus = (status: string): string => {
-  if (status === 'DRAFT') return 'PENDING_APPROVAL';
+  // Map legacy statuses to simplified flow
+  if (['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'IN_FLIGHT'].includes(status)) return 'OPEN';
+  if (status === 'CANCELLED') return 'COMPLETED';
   return status;
 };
 
@@ -121,29 +123,16 @@ export function useMissionImages(missionId: string | null) {
 }
 
 export function useApproveMission() {
+  // Kept for backward compatibility but now unused
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (missionId: string) => {
-      const { error } = await supabase
-        .from('missions')
-        .update({
-          status: 'APPROVED',
-          approved_by_user_id: user?.id,
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', missionId);
-
-      if (error) throw error;
+      // No-op in simplified flow
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['missions'] });
-      toast.success('Mission approved successfully!');
-    },
-    onError: (error) => {
-      console.error('Error approving mission:', error);
-      toast.error('Failed to approve mission');
     },
   });
 }
@@ -224,9 +213,9 @@ export function useUploadMissionImage() {
         throw new Error(`Failed to validate mission status: ${missionError.message}`);
       }
 
-      const allowedStatuses = new Set(['APPROVED', 'IN_FLIGHT']);
+      const allowedStatuses = new Set(['OPEN', 'APPROVED', 'IN_FLIGHT', 'PENDING_APPROVAL']);
       if (!allowedStatuses.has(missionRow.status)) {
-        throw new Error('Image upload is allowed only for approved missions before completion');
+        throw new Error('Image upload is allowed only for open inspections');
       }
 
       const fileExt = file.name.split('.').pop();
@@ -439,12 +428,12 @@ export function useCreateMission() {
       const supabasePayload = {
         id: uuidv4(),
         panel_id: mission.panel_id,
-        status: 'PENDING_APPROVAL' as const,
+        status: 'OPEN' as const,
       };
 
       const backendPayload = {
         panel_id: mission.panel_id,
-        status: 'PENDING_APPROVAL' as const,
+        status: 'OPEN' as const,
       };
 
       const { error } = await supabase

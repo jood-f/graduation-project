@@ -15,9 +15,11 @@ router = APIRouter(prefix="/api/v1/missions", tags=["Missions"])
 
 
 def _normalize_legacy_status(mission: Mission) -> Mission:
-    # Backward compatibility: convert legacy DRAFT rows to PENDING_APPROVAL.
-    if mission.status == "DRAFT":
-        mission.status = "PENDING_APPROVAL"
+    # Backward compatibility: convert legacy statuses to OPEN.
+    if mission.status in ("DRAFT", "PENDING_APPROVAL", "APPROVED", "IN_FLIGHT"):
+        mission.status = "OPEN"
+    if mission.status == "CANCELLED":
+        mission.status = "COMPLETED"
     return mission
 
 
@@ -51,8 +53,11 @@ def list_missions(
     missions = q.order_by(Mission.created_at.desc()).all()
     changed = False
     for mission in missions:
-        if mission.status == "DRAFT":
-            mission.status = "PENDING_APPROVAL"
+        if mission.status in ("DRAFT", "PENDING_APPROVAL", "APPROVED", "IN_FLIGHT"):
+            mission.status = "OPEN"
+            changed = True
+        elif mission.status == "CANCELLED":
+            mission.status = "COMPLETED"
             changed = True
 
     if changed:
@@ -70,26 +75,23 @@ def get_mission(
     mission = db.query(Mission).filter(Mission.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
-    if mission.status == "DRAFT":
-        mission.status = "PENDING_APPROVAL"
-        db.commit()
-        db.refresh(mission)
+    _normalize_legacy_status(mission)
+    db.commit()
+    db.refresh(mission)
     return mission
 
 
-@router.post("/{mission_id}/approve", response_model=MissionOut)
-def approve_mission(
+@router.post("/{mission_id}/complete", response_model=MissionOut)
+def complete_mission(
     mission_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles(["admin", "drone_team"])),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
     mission = db.query(Mission).filter(Mission.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
 
-    mission.status = "APPROVED"
-    mission.approved_by_user_id = current_user.id
-    mission.approved_at = datetime.now(timezone.utc)
+    mission.status = "COMPLETED"
 
     db.add(mission)
     db.commit()

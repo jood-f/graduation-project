@@ -1,5 +1,5 @@
-import { FC } from 'react';
-import { AlertTriangle, CheckCircle, Droplet, Flame, Snowflake, Sparkles, Wrench } from 'lucide-react';
+import { FC, useState } from 'react';
+import { AlertTriangle, CheckCircle, Droplet, Flame, Snowflake, Sparkles, Wrench, XCircle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -84,6 +84,32 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
     },
     onError: (err) => {
       toast.error(`Re-analysis failed: ${(err as Error).message}`);
+    },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async ({ inspectionId }: { inspectionId: string }) => {
+      const response = await apiFetch(
+        `${API_BASE_URL}/inspection-results/${inspectionId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'PASS', notes: 'Manually dismissed by user (incorrect classification)' }),
+        }
+      );
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Failed to dismiss detection');
+      }
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mission-cv-raw-by-image', missionId] });
+      queryClient.invalidateQueries({ queryKey: ['mission-cv-faults', missionId] });
+      toast.success('Detection dismissed as incorrect classification');
+    },
+    onError: (err) => {
+      toast.error(`Dismiss failed: ${(err as Error).message}`);
     },
   });
 
@@ -246,19 +272,35 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
                       <span className="font-medium">
                         class: {d.class_name}
                       </span>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          'text-[10px]',
-                          d.status === 'FAIL'
-                            ? 'border-destructive/30 text-destructive'
-                            : d.status === 'PASS'
-                            ? 'border-success/30 text-success'
-                            : ''
+                      <div className="flex items-center gap-1">
+                        {d.status === 'FAIL' && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[10px] text-destructive hover:text-destructive"
+                            disabled={dismissMutation.isPending}
+                            onClick={() => dismissMutation.mutate({ inspectionId: d.inspection_id })}
+                            title="Dismiss this detection as incorrect"
+                          >
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Dismiss
+                          </Button>
                         )}
-                      >
-                        {d.status}
-                      </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-[10px]',
+                            d.status === 'FAIL'
+                              ? 'border-destructive/30 text-destructive'
+                              : d.status === 'PASS'
+                              ? 'border-success/30 text-success'
+                              : ''
+                          )}
+                        >
+                          {d.status}
+                        </Badge>
+                      </div>
                     </div>
                     {d.model_version && (
                       <p>model: {d.model_version}</p>
@@ -385,9 +427,23 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium capitalize">{result.fault_type.toLowerCase().replace('_', ' ')}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {(result.confidence * 100).toFixed(0)}% confidence
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-destructive hover:text-destructive"
+                          disabled={dismissMutation.isPending}
+                          onClick={() => dismissMutation.mutate({ inspectionId: result.id })}
+                          title="Dismiss this detection as incorrect classification"
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Dismiss
+                        </Button>
+                        <Badge variant="outline" className="text-xs">
+                          {(result.confidence * 100).toFixed(0)}% confidence
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">Image: {result.storage_path || 'Unknown'}</p>
                     <p className="text-xs text-muted-foreground mt-1">

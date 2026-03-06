@@ -9,11 +9,8 @@ import { cn } from '@/lib/utils';
 import { Image as ImageIcon, ScanEye } from 'lucide-react';
 
 const statusStyles: Record<string, string> = {
-  PENDING_APPROVAL: 'bg-warning/10 text-warning border-warning/20',
-  APPROVED: 'bg-info/10 text-info border-info/20',
-  IN_FLIGHT: 'bg-primary/10 text-primary border-primary/20',
+  OPEN: 'bg-info/10 text-info border-info/20',
   COMPLETED: 'bg-success/10 text-success border-success/20',
-  CANCELLED: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
 interface MissionDetailDialogProps {
@@ -33,9 +30,9 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Mission Details</DialogTitle>
+          <DialogTitle>Inspection Details</DialogTitle>
           <DialogDescription>
-            Mission for panel {mission.panel_label}
+            Inspection for panel {mission.panel_label}
           </DialogDescription>
         </DialogHeader>
 
@@ -44,8 +41,8 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Status:</span>
-              <Badge className={cn('ml-2', statusStyles[mission.status] || statusStyles.PENDING_APPROVAL)}>
-                {mission.status.replace('_', ' ')}
+              <Badge className={cn('ml-2', statusStyles[mission.status] || statusStyles.OPEN)}>
+                {mission.status === 'OPEN' ? 'Open' : mission.status === 'COMPLETED' ? 'Completed' : mission.status.replace('_', ' ')}
               </Badge>
             </div>
             <div>
@@ -56,12 +53,6 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
               <span className="text-muted-foreground">Created:</span>
               <span className="ml-2">{new Date(mission.created_at).toLocaleString()}</span>
             </div>
-            {mission.approved_by_name && (
-              <div>
-                <span className="text-muted-foreground">Approved by:</span>
-                <span className="ml-2">{mission.approved_by_name}</span>
-              </div>
-            )}
           </div>
 
           {/* Tabs for Images and AI Analysis */}
@@ -89,11 +80,11 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
                     <div key={img.id} className="relative">
                       <img
                         src={img.url}
-                        alt="Drone capture"
+                        alt="Inspection capture"
                         className="rounded-lg object-cover h-40 w-full cursor-pointer hover:opacity-90 transition-opacity"
                         onClick={() => window.open(img.url, '_blank')}
                       />
-                      {canDeleteImages && mission.status === 'IN_FLIGHT' && (
+                      {canDeleteImages && mission.status === 'OPEN' && (
                         <button
                           className="absolute top-2 right-2 bg-white/80 rounded p-1 text-danger hover:opacity-90 disabled:opacity-60"
                           onClick={(e) => {
