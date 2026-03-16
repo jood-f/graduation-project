@@ -9,6 +9,7 @@ class TelemetryCreate(BaseModel):
     voltage: float
     current: float
     temperature: float
+    light: float
 
 
 class TelemetryOut(BaseModel):
@@ -17,6 +18,7 @@ class TelemetryOut(BaseModel):
     voltage: float
     current: float
     temperature: float
+    light: float
     timestamp: datetime
     predicted_power: Optional[float] = None
     prediction_error: Optional[float] = None

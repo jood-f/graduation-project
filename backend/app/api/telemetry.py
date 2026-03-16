@@ -49,6 +49,7 @@ def _build_telemetry_data(records: list[Telemetry]) -> tuple[list[dict], int]:
             or not _is_valid_measurement(row.voltage)
             or not _is_valid_measurement(row.current)
             or not _is_valid_measurement(row.temperature)
+            or not _is_valid_measurement(row.light)
         ):
             dropped += 1
             continue
@@ -58,6 +59,7 @@ def _build_telemetry_data(records: list[Telemetry]) -> tuple[list[dict], int]:
                 "voltage": row.voltage,
                 "current": row.current,
                 "temperature": row.temperature,
+                "light": row.light,
                 "timestamp": row.timestamp.isoformat(),
             }
         )
