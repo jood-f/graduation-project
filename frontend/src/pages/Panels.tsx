@@ -51,6 +51,7 @@ interface PanelDetailsData {
     temperature: number;
     timestamp: string;
     power: number;
+    light: number;
   } | null;
   faults_count: number;
   missions_count: number;
@@ -92,7 +93,7 @@ export default function Panels() {
       const [telemetryLatestRes, telemetryCountRes, faultsCountRes, missionsRes] = await Promise.all([
         (supabase as any)
           .from('telemetry')
-          .select('voltage,current,temperature,timestamp')
+          .select('voltage,current,temperature,timestamp,light')
           .eq('panel_id', panelId)
           .order('timestamp', { ascending: false })
           .limit(1)
@@ -122,6 +123,7 @@ export default function Panels() {
         ? {
             ...telemetryLatestRes.data,
             power: telemetryLatestRes.data.voltage * telemetryLatestRes.data.current,
+            light: telemetryLatestRes.data.light,
           }
         : null;
 
@@ -277,9 +279,14 @@ export default function Panels() {
                     <div>
                       <p className="text-muted-foreground">Latest telemetry</p>
                       {panelDetails.latest_telemetry ? (
-                        <p>
-                          {panelDetails.latest_telemetry.power.toFixed(2)} W | {panelDetails.latest_telemetry.voltage.toFixed(2)} V | {panelDetails.latest_telemetry.temperature.toFixed(2)} C | {new Date(panelDetails.latest_telemetry.timestamp).toLocaleString()}
-                        </p>
+                        <>
+                          <p>
+                            {panelDetails.latest_telemetry.power.toFixed(2)} W | {panelDetails.latest_telemetry.voltage.toFixed(2)} V | {panelDetails.latest_telemetry.current.toFixed(2)} A | {panelDetails.latest_telemetry.temperature.toFixed(2)} °C | {panelDetails.latest_telemetry.light.toFixed(2)} lx
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Recorded at: {new Date(panelDetails.latest_telemetry.timestamp).toLocaleString()}
+                          </p>
+                        </>
                       ) : (
                         <p>No telemetry data available.</p>
                       )}
