@@ -25,6 +25,7 @@ ml/*.png
 *.pt
 CV/YOLO_RESULTS/
 runs/detect/
+!CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/weights/best.pt
 # IDE
 .vscode/
 .idea/

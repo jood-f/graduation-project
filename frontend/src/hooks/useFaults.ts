@@ -2,8 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { apiFetch } from '@/lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-
 export interface Fault {
   id: string;
   panel_id: string;
@@ -99,7 +97,7 @@ export function useMissionFaults(missionId: string | null) {
       if (!missionId) return [];
 
       const response = await apiFetch(
-        `${API_BASE_URL}/inspection-results/cv-anomalies?mission_id=${encodeURIComponent(missionId)}`
+        `/inspection-results/cv-anomalies?mission_id=${encodeURIComponent(missionId)}`
       );
       if (!response.ok) {
         const text = await response.text();

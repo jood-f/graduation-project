@@ -4,8 +4,6 @@
  */
 import { apiFetch } from '@/lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-
 export interface DetectionResult {
   inspection_id: string;
   class_name: string;
@@ -39,7 +37,7 @@ export async function analyzeImage(
   confidenceThreshold: number = 0.5
 ): Promise<AnalysisResponse> {
   const response = await apiFetch(
-    `${API_BASE_URL}/mission-images/${imageId}/analyze?confidence_threshold=${confidenceThreshold}`,
+    `/mission-images/${imageId}/analyze?confidence_threshold=${confidenceThreshold}`,
     {
       method: 'POST',
       headers: {
@@ -63,7 +61,7 @@ export async function analyzeImage(
  */
 export async function getImageResults(imageId: string): Promise<DetectionResult[]> {
   const response = await apiFetch(
-    `${API_BASE_URL}/mission-images/${imageId}/results`,
+    `/mission-images/${imageId}/results`,
     {
       method: 'GET',
       headers: {
@@ -86,7 +84,7 @@ export async function getImageResults(imageId: string): Promise<DetectionResult[
  */
 export async function checkModelAvailability(): Promise<boolean> {
   try {
-    const response = await apiFetch(`${API_BASE_URL}/cv/status`);
+    const response = await apiFetch('/cv/status');
     if (response.ok) {
       const data = await response.json();
       return data.available === true;

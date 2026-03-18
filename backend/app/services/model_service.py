@@ -1,16 +1,16 @@
 """
 ML Model Service for Real-time Telemetry Analysis
-Handles model loading, predictions, and anomaly detection
+Handles model loading, predictions, and anomaly detection.
 """
 
-import numpy as np
-from pathlib import Path
-from typing import List, Dict, Optional
-from datetime import datetime, timedelta
-from tensorflow import keras
-from sklearn.preprocessing import StandardScaler
-import joblib
 import logging
+import os
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import joblib
+import numpy as np
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
@@ -19,74 +19,161 @@ MIN_ACTUAL_POWER_FOR_PERCENT = 1.0
 
 class TelemetryModelService:
     """Service for loading and using the trained telemetry prediction model"""
-    
+
     def __init__(self):
         self.model = None
         self.scaler_X = StandardScaler()
         self.scaler_y = StandardScaler()
         self.sequence_length = 20
         self.is_fitted = False
+        self.model_path: Optional[str] = None
+        self.scaler_x_path: Optional[str] = None
+        self.scaler_y_path: Optional[str] = None
+        self.unavailable_reason: Optional[str] = None
+        self.model_search_paths: list[str] = []
+        self.scaler_search_paths: list[str] = []
         self._load_model()
         # Load training-time scalers if they exist
         self._load_scalers()
-    
+
+    def _repo_root(self) -> Path:
+        return Path(__file__).resolve().parents[3]
+
+    def _candidate_model_paths(self) -> list[Path]:
+        candidates: list[Path] = []
+
+        env_model_path = os.getenv("ML_MODEL_PATH")
+        if env_model_path:
+            candidates.append(Path(env_model_path))
+
+        repo_root = self._repo_root()
+        candidates.extend(
+            [
+                repo_root / "ml" / "telemetry_power_model.h5",
+                repo_root / "backend" / "ml" / "telemetry_power_model.h5",
+                Path.cwd() / "ml" / "telemetry_power_model.h5",
+                Path.cwd() / "backend" / "ml" / "telemetry_power_model.h5",
+            ]
+        )
+
+        unique: list[Path] = []
+        for path in candidates:
+            if path not in unique:
+                unique.append(path)
+        return unique
+
+    def _candidate_scaler_paths(self) -> list[tuple[Path, Path]]:
+        candidates: list[tuple[Path, Path]] = []
+
+        env_scaler_x_path = os.getenv("ML_SCALER_X_PATH")
+        env_scaler_y_path = os.getenv("ML_SCALER_Y_PATH")
+        env_scaler_dir = os.getenv("ML_SCALER_DIR")
+
+        if env_scaler_x_path and env_scaler_y_path:
+            candidates.append((Path(env_scaler_x_path), Path(env_scaler_y_path)))
+
+        if env_scaler_dir:
+            scaler_dir = Path(env_scaler_dir)
+            candidates.append(
+                (
+                    scaler_dir / "telemetry_scaler_X.joblib",
+                    scaler_dir / "telemetry_scaler_y.joblib",
+                )
+            )
+
+        repo_root = self._repo_root()
+        for scaler_dir in [
+            repo_root / "ml",
+            repo_root / "backend" / "ml",
+            Path.cwd() / "ml",
+            Path.cwd() / "backend" / "ml",
+            Path(__file__).resolve().parents[2] / "ml",
+        ]:
+            candidates.append(
+                (
+                    scaler_dir / "telemetry_scaler_X.joblib",
+                    scaler_dir / "telemetry_scaler_y.joblib",
+                )
+            )
+
+        unique: list[tuple[Path, Path]] = []
+        for x_path, y_path in candidates:
+            pair = (x_path, y_path)
+            if pair not in unique:
+                unique.append(pair)
+        return unique
+
     def _load_model(self):
         """Load the trained LSTM model"""
-        model_path = Path(__file__).parent.parent.parent.parent / "ml" / "telemetry_power_model.h5"
-        
-        if not model_path.exists():
-            logger.warning(f"Model not found at {model_path}. Predictions will not be available.")
+        candidates = self._candidate_model_paths()
+        self.model_search_paths = [str(path) for path in candidates]
+
+        model_path = next((path for path in candidates if path.exists()), None)
+        if model_path is None:
+            self.unavailable_reason = (
+                "Telemetry model file not found. "
+                "Set ML_MODEL_PATH or deploy ml/telemetry_power_model.h5."
+            )
+            logger.warning(
+                "%s Searched: %s",
+                self.unavailable_reason,
+                ", ".join(self.model_search_paths),
+            )
             return
-        
+
         try:
+            from tensorflow import keras
+        except Exception as e:
+            self.unavailable_reason = (
+                "TensorFlow is not installed, so the telemetry model cannot load. "
+                "Install tensorflow-cpu in the backend environment."
+            )
+            logger.error("%s Import error: %s", self.unavailable_reason, e)
+            return
+
+        try:
+            self.model_path = str(model_path)
             self.model = keras.models.load_model(str(model_path), compile=False)
             logger.info(f"Model loaded successfully from {model_path}")
+            self.unavailable_reason = None
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
+            self.unavailable_reason = f"Telemetry model load failed: {e}"
             self.model = None
-    
+
     def _load_scalers(self):
-        """Load scalers saved during training if available. Tries multiple candidate locations.
-
-        We prefer the ml/ folder next to the repository root but also try the current working
-        directory (useful when uvicorn changes CWD).
-        """
-        candidates = []
-
-        # Preferred: repository-root/ml
-        repo_ml = Path(__file__).parent.parent.parent.parent / "ml"
-        candidates.append(repo_ml)
-
-        # Fallback: CWD/ml
-        cwd_ml = Path.cwd() / "ml"
-        if cwd_ml != repo_ml:
-            candidates.append(cwd_ml)
-
-        # Also try relative to this file (defensive)
-        relative_ml = Path(__file__).parent.parent.parent / "ml"
-        if relative_ml not in candidates:
-            candidates.append(relative_ml)
-
+        """Load scalers saved during training if available."""
+        candidates = self._candidate_scaler_paths()
+        self.scaler_search_paths = [
+            f"{x_path} | {y_path}" for x_path, y_path in candidates
+        ]
         x_path = None
         y_path = None
-        for c in candidates:
-            tx = c / "telemetry_scaler_X.joblib"
-            ty = c / "telemetry_scaler_y.joblib"
-            logger.debug(f"Checking scaler candidate path: {tx}")
-            if tx.exists() and ty.exists():
-                x_path = tx
-                y_path = ty
-                logger.info(f"Found telemetry scalers in {c}")
+        for candidate_x_path, candidate_y_path in candidates:
+            logger.debug(
+                "Checking scaler candidate paths: %s and %s",
+                candidate_x_path,
+                candidate_y_path,
+            )
+            if candidate_x_path.exists() and candidate_y_path.exists():
+                x_path = candidate_x_path
+                y_path = candidate_y_path
+                logger.info(f"Found telemetry scalers at {x_path} and {y_path}")
                 break
 
         if x_path is None or y_path is None:
-            logger.info(f"No telemetry scaler files found in candidates: {candidates}")
+            logger.info(
+                "No telemetry scaler files found. Searched: %s",
+                "; ".join(self.scaler_search_paths),
+            )
             return
 
         try:
             self.scaler_X = joblib.load(str(x_path))
             self.scaler_y = joblib.load(str(y_path))
             self.is_fitted = True
+            self.scaler_x_path = str(x_path)
+            self.scaler_y_path = str(y_path)
             logger.info(f"Loaded telemetry scalers from {x_path} and {y_path}")
         except Exception as e:
             logger.warning(f"Failed to load telemetry scalers: {e}")
@@ -278,7 +365,12 @@ class TelemetryModelService:
             'model_loaded': self.model is not None,
             'scalers_fitted': self.is_fitted,
             'sequence_length': self.sequence_length,
-            'model_path': str(Path(__file__).parent.parent.parent.parent / "ml" / "telemetry_power_model.h5")
+            'model_path': self.model_path,
+            'scaler_x_path': self.scaler_x_path,
+            'scaler_y_path': self.scaler_y_path,
+            'reason': self.unavailable_reason,
+            'searched_model_paths': self.model_search_paths,
+            'searched_scaler_paths': self.scaler_search_paths,
         }
 
 

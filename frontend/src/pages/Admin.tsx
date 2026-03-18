@@ -12,8 +12,6 @@ import { Shield, Users } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import type { UserRole } from '@/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-
 interface UserWithRole {
   user_id: string;
   name: string;
@@ -57,7 +55,7 @@ export default function Admin() {
         throw new Error('Current user not found');
       }
 
-      const response = await apiFetch(`${API_BASE_URL}/admin/users`, {
+      const response = await apiFetch('/admin/users', {
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -84,7 +82,7 @@ export default function Admin() {
         throw new Error('Current user not found');
       }
 
-      const response = await apiFetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
+      const response = await apiFetch(`/admin/users/${userId}/role`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole }),

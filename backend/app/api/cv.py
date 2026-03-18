@@ -16,5 +16,6 @@ def cv_status():
         "yolo_available": service.is_yolo_available() if hasattr(service, "is_yolo_available") else False,
         "reason": getattr(service, "unavailable_reason", None),
         "model_path": service.model_path,
+        "searched_paths": getattr(service, "model_search_paths", []),
         "model_version": getattr(service, "model_version", None),
     }

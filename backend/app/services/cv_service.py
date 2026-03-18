@@ -62,38 +62,55 @@ class CVModelService:
         self.model_path = model_path
         self.model_version = "yolov8-solar-v1"
         self.unavailable_reason: Optional[str] = None
+        self.model_search_paths: List[str] = []
         self.allow_heuristic_fallback = str(
             os.getenv("CV_ALLOW_HEURISTIC_FALLBACK", "false")
         ).strip().lower() in {"1", "true", "yes", "on"}
         self.detection_mode: str = "none"  # yolo | heuristic | none
         self._load_model()
 
-    def _load_model(self):
-        """Load the trained YOLOv8 model"""
+    def _candidate_model_paths(self) -> List[Path]:
+        if self.model_path is not None:
+            return [Path(self.model_path)]
+
+        candidates: List[Path] = []
         env_model_path = os.getenv("CV_MODEL_PATH")
         if env_model_path:
-            self.model_path = env_model_path
+            candidates.append(Path(env_model_path))
 
-        if self.model_path is None:
-            # Default path - adjust based on your trained model location
-            base_path = Path(__file__).parent.parent.parent.parent
-            possible_paths = [
+        base_path = Path(__file__).resolve().parents[3]
+        candidates.extend(
+            [
                 base_path / "CV" / "YOLO_RESULTS" / "run_20260210_194054" / "runs" / "detect_train" / "weights" / "best.pt",
                 base_path / "CV" / "runs" / "detect" / "train" / "weights" / "best.pt",
                 base_path / "CV" / "best.pt",
-                base_path / "cv" / "YOLO_RESULTS" / "run_20260210_194054" / "runs" / "detect_train" / "weights" / "best.pt",
-                base_path / "cv" / "runs" / "detect" / "train" / "weights" / "best.pt",
-                base_path / "cv" / "best.pt",
-                base_path / "runs" / "detect" / "train" / "weights" / "best.pt",
+                base_path / "backend" / "CV" / "best.pt",
+                base_path / "backend" / "models" / "cv" / "best.pt",
+                Path.cwd() / "CV" / "best.pt",
+                Path.cwd() / "backend" / "models" / "cv" / "best.pt",
+                Path.cwd() / "runs" / "detect" / "train" / "weights" / "best.pt",
             ]
-            
-            for path in possible_paths:
-                if path.exists():
-                    self.model_path = str(path)
-                    break
-        
+        )
+
+        unique: List[Path] = []
+        for path in candidates:
+            if path not in unique:
+                unique.append(path)
+        return unique
+
+    def _load_model(self):
+        """Load the trained YOLOv8 model"""
+        candidates = self._candidate_model_paths()
+        self.model_search_paths = [str(path) for path in candidates]
+        resolved_model_path = next((path for path in candidates if path.exists()), None)
+        if resolved_model_path is not None:
+            self.model_path = str(resolved_model_path)
+
         if self.model_path is None or not Path(self.model_path).exists():
-            self.unavailable_reason = "YOLO weights file not found (set CV_MODEL_PATH or add best.pt)."
+            self.unavailable_reason = (
+                "YOLO weights file not found (set CV_MODEL_PATH or deploy best.pt). "
+                f"Searched: {', '.join(self.model_search_paths)}"
+            )
             logger.warning(self.unavailable_reason)
             self.model = None
             if self.allow_heuristic_fallback and cv2 is not None and np is not None:

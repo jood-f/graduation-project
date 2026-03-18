@@ -39,8 +39,6 @@ const conditionStyles = {
   CRITICAL: 'bg-destructive/10 text-destructive border-destructive/20',
 } as const;
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-
 type RawDetection = {
   inspection_id: string;
   class_name: string;
@@ -66,7 +64,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
   const reanalyzeMutation = useMutation({
     mutationFn: async ({ imageId, threshold = 0.5 }: { imageId: string; threshold?: number }) => {
       const response = await apiFetch(
-        `${API_BASE_URL}/mission-images/${imageId}/re-analyze?confidence_threshold=${threshold}`,
+        `/mission-images/${imageId}/re-analyze?confidence_threshold=${threshold}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' } }
       );
 
@@ -90,7 +88,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
   const dismissMutation = useMutation({
     mutationFn: async ({ inspectionId }: { inspectionId: string }) => {
       const response = await apiFetch(
-        `${API_BASE_URL}/inspection-results/${inspectionId}`,
+        `/inspection-results/${inspectionId}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -122,7 +120,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
       const rows = await Promise.all(
         missionImages.map(async (img) => {
           try {
-            const res = await apiFetch(`${API_BASE_URL}/mission-images/${img.id}/results`);
+            const res = await apiFetch(`/mission-images/${img.id}/results`);
             if (!res.ok) {
               return {
                 imageId: img.id,

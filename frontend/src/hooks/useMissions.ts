@@ -37,7 +37,6 @@ const normalizeMissionStatus = (status: string): string => {
   return status;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 const MAX_IMAGE_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -366,7 +365,7 @@ export function useDeleteMissionImage() {
 
   return useMutation({
     mutationFn: async ({ imageId, missionId }: { imageId: string; missionId: string }) => {
-      const resp = await apiFetch(`${API_BASE_URL}/mission-images/${imageId}`, {
+      const resp = await apiFetch(`/mission-images/${imageId}`, {
         method: 'DELETE',
       });
       if (!resp.ok) {
@@ -446,7 +445,7 @@ export function useCreateMission() {
       }
 
       // Fallback: create mission through backend API (direct DB connection) when Supabase RLS blocks inserts.
-      const response = await apiFetch(`${API_BASE_URL}/missions`, {
+      const response = await apiFetch('/missions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(backendPayload),

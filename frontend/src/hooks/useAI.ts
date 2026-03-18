@@ -3,8 +3,6 @@ import { toast } from 'sonner';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { apiFetch } from '@/lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-
 export interface InspectionResult {
   id: string;
   mission_id: string;
@@ -26,7 +24,7 @@ export function useInspectionResults(imageId: string | null) {
     queryKey: ['inspection-results', imageId],
     queryFn: async () => {
       if (!imageId) return [];
-      const res = await apiFetch(`${API_BASE_URL}/mission-images/${imageId}/results`);
+      const res = await apiFetch(`/mission-images/${imageId}/results`);
       if (!res.ok) throw new Error('Failed to fetch inspection results');
       return await res.json();
     },
@@ -88,7 +86,7 @@ export function useCreateInspectionResults() {
         };
 
         try {
-          let res = await apiFetch(`${API_BASE_URL}/inspection-results`, {
+          let res = await apiFetch('/inspection-results', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -98,7 +96,7 @@ export function useCreateInspectionResults() {
           if (!res.ok && r.mission_image_id) {
             console.warn('[useAI] Initial persist failed, retrying without mission_image_id');
             const payloadNoImage = { ...payload, mission_image_id: null };
-            res = await apiFetch(`${API_BASE_URL}/inspection-results`, {
+            res = await apiFetch('/inspection-results', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payloadNoImage),
