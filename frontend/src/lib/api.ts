@@ -30,10 +30,10 @@ function getResolvedBaseUrl(): string {
     const parsed = new URL(normalized);
     const currentHost = window.location.hostname;
 
-    // If the app is opened from another device, loopback API hosts are unreachable there.
+    // A deployed frontend can never reach a loopback backend like 127.0.0.1:8000.
+    // Fall back to the deployed Render API instead of inventing host:8000 URLs.
     if (isLoopbackHost(parsed.hostname) && !isLoopbackHost(currentHost)) {
-      parsed.hostname = currentHost;
-      return normalizeBaseUrl(parsed.toString());
+      return normalizeBaseUrl(DEPLOYED_API_BASE_URL);
     }
   } catch {
     // Keep the raw configured value if parsing fails.
@@ -51,8 +51,7 @@ function resolveUrl(path: string, baseUrl: string = BASE_URL): string {
       const parsed = new URL(path);
       const runtimeHost = window.location.hostname;
       if (isLoopbackHost(parsed.hostname) && !isLoopbackHost(runtimeHost)) {
-        parsed.hostname = runtimeHost;
-        return parsed.toString();
+        return `${normalizeBaseUrl(DEPLOYED_API_BASE_URL)}${parsed.pathname}${parsed.search}`;
       }
     } catch {
       // Keep provided absolute URL unchanged if parsing fails.
@@ -81,14 +80,13 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   try {
     return await fetch(primaryUrl, requestInit);
   } catch (error) {
-    // Retry once with runtime host when loopback hosts are unreachable from remote clients.
+    // Retry once with the deployed backend when loopback hosts are unreachable from remote clients.
     if (typeof window !== 'undefined') {
       try {
         const parsed = new URL(primaryUrl);
         const runtimeHost = window.location.hostname;
         if (isLoopbackHost(parsed.hostname) && !isLoopbackHost(runtimeHost)) {
-          parsed.hostname = runtimeHost;
-          const retryUrl = parsed.toString();
+          const retryUrl = `${normalizeBaseUrl(DEPLOYED_API_BASE_URL)}${parsed.pathname}${parsed.search}`;
           return await fetch(retryUrl, requestInit);
         }
       } catch {
