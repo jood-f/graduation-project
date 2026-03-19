@@ -17,49 +17,46 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null> {
-  // 1) profile
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("user_id, name, avatar, created_at, role")
-    .eq("user_id", supabaseUser.id)
-    .maybeSingle();
+  const normalizeRole = (r: string): UserRole => {
+    const normalized = r.toLowerCase().replace(/\s+/g, "_");
+    if (["admin", "operator"].includes(normalized)) {
+      return normalized as UserRole;
+    }
+    return "operator";
+  };
+
+  const [
+    { data: profile, error: profileError },
+    { data: roleRow, error: roleError },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("user_id, name, avatar, created_at")
+      .eq("user_id", supabaseUser.id)
+      .maybeSingle(),
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", supabaseUser.id)
+      .maybeSingle(),
+  ]);
+
+  if (roleError) {
+    console.warn("Error fetching user role:", roleError);
+  }
+
+  const role: UserRole = normalizeRole(roleRow?.role ?? "operator");
 
   if (profileError) {
     console.error("Error fetching profile:", profileError);
-    // لو ما قدرنا نجيب بروفايل، على الأقل رجّعي يوزر minimal بدل ما يعلق
     return {
       id: supabaseUser.id,
       email: supabaseUser.email || "",
       name: supabaseUser.email?.split("@")[0] || "User",
-      role: "operator",
+      role,
       avatar: undefined,
       createdAt: new Date().toISOString(),
     };
-  }
-
-  // 2) role via RPC (احترافي)
-  // Normalize role to expected format: lowercase with underscores
-  const normalizeRole = (r: string): UserRole => {
-    const normalized = r.toLowerCase().replace(/\s+/g, '_');
-    if (['admin', 'operator'].includes(normalized)) {
-      return normalized as UserRole;
-    }
-    return 'operator';
-  };
-  
-  let role: UserRole = normalizeRole((profile?.role as string) || "operator");
-  try {
-    const { data: roleData, error: roleError } = await (supabase as any).rpc("get_user_role", {
-      user_id: supabaseUser.id, // ✅ لازم الاسم نفسه في SQL
-    });
-
-    if (roleError) {
-      console.error("Error fetching role (RPC):", roleError);
-    } else if (roleData) {
-      role = normalizeRole(roleData as string);
-    }
-  } catch (e) {
-    console.error("RPC exception:", e);
   }
 
   return {
@@ -98,12 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     };
 
-    // 1) أول ما يفتح التطبيق: جيبي السيشن الحالية
     supabase.auth.getSession().then(({ data }) => {
       handleSession(data.session ?? null);
     });
 
-    // 2) أي تغيير تسجيل دخول/خروج
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       handleSession(newSession);
     });

@@ -92,9 +92,9 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
                             if (!confirm('Delete this image?')) return;
                             deleteMut.mutate({ imageId: img.id, missionId: mission.id });
                           }}
-                          disabled={deleteMut.isLoading}
+                          disabled={deleteMut.isPending}
                         >
-                          {deleteMut.isLoading ? 'Deleting...' : 'Delete'}
+                          {deleteMut.isPending ? 'Deleting...' : 'Delete'}
                         </button>
                       )}
                     </div>

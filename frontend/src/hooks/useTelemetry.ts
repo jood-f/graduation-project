@@ -2,8 +2,6 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { apiGet } from '@/lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-
 export interface Telemetry {
   id: string;
   panel_id: string;
@@ -101,7 +99,7 @@ export function usePredictions(panelId: string, limit: number = 100) {
     queryKey: ['predictions', panelId, limit],
     queryFn: async (): Promise<PredictionResult> => {
       return apiGet<PredictionResult>(
-        `${API_BASE_URL}/telemetry/predict?panel_id=${panelId}&limit=${limit}`
+        `/telemetry/predict?panel_id=${panelId}&limit=${limit}`
       );
     },
     enabled: !!panelId,
@@ -117,7 +115,7 @@ export function useAnomalies(panelId: string, threshold: number = 5.0) {
     queryKey: ['ml-anomalies', panelId, threshold],
     queryFn: async (): Promise<AnomalyResult> => {
       return apiGet<AnomalyResult>(
-        `${API_BASE_URL}/telemetry/anomalies?panel_id=${panelId}&threshold=${threshold}`
+        `/telemetry/anomalies?panel_id=${panelId}&threshold=${threshold}`
       );
     },
     enabled: !!panelId,
@@ -132,7 +130,7 @@ export function useNextPrediction(panelId: string) {
   return useQuery({
     queryKey: ['next-prediction', panelId],
     queryFn: async () => {
-      return apiGet(`${API_BASE_URL}/telemetry/predict-next?panel_id=${panelId}`);
+      return apiGet(`/telemetry/predict-next?panel_id=${panelId}`);
     },
     enabled: !!panelId,
     refetchInterval: 1000 * 30, // Refresh every 30 seconds
@@ -244,7 +242,7 @@ export function useModelInfo() {
   return useQuery({
     queryKey: ['model-info'],
     queryFn: async () => {
-      return apiGet(`${API_BASE_URL}/telemetry/model-info`);
+      return apiGet('/telemetry/model-info');
     },
     staleTime: 1000 * 60 * 10, // Cache for 10 minutes
   });

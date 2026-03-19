@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { analyzeImage, checkModelAvailability } from '@/services/cvService';
 import { preprocessImage, detectDefects } from '@/lib/gemini';
 import { detectHighEdgeDensity } from '@/lib/imageHeuristics';
-import { useCreateInspectionResults } from './useAI';
+import { useCreateInspectionResults, type InspectionResult } from './useAI';
 import { apiFetch } from '@/lib/api';
 
 export interface Mission {
@@ -287,10 +287,10 @@ export function useUploadMissionImage() {
             const detection = await detectDefects(base64, 'RGB');
 
             // Convert detection result to inspection-result shape and store in client store
-            const mapped = (detection.defects || []).map((d) => ({
+            const mapped: Array<Omit<InspectionResult, 'id' | 'created_at'>> = (detection.defects || []).map((d) => ({
               mission_id: missionId,
               mission_image_id: imageData.id,
-              defect_type: d.type as any,
+              defect_type: d.type,
               confidence: d.confidence,
               bbox_x: d.bbox.x,
               bbox_y: d.bbox.y,
@@ -299,19 +299,18 @@ export function useUploadMissionImage() {
               description: d.description,
               overall_condition: detection.overallCondition,
               recommended_action: detection.recommendedAction,
-              created_at: new Date().toISOString(),
             }));
 
             if (mapped.length > 0) {
               // save to client store (not persisted to backend DB)
-              await createInspection.mutationFn(mapped as any);
+              await createInspection.mutateAsync(mapped);
               toast.info('Image uploaded - using client AI fallback (not persisted)');
             } else {
               // No defects returned from client AI - run a quick local heuristic (edge detection)
               try {
                 const heuristic = await detectHighEdgeDensity(file);
                 if (heuristic.isLikelyDefect) {
-                  const auto = [{
+                  const auto: Array<Omit<InspectionResult, 'id' | 'created_at'>> = [{
                     mission_id: missionId,
                     mission_image_id: imageData.id,
                     defect_type: 'CRACK',
@@ -323,10 +322,9 @@ export function useUploadMissionImage() {
                     description: `Client heuristic detected edges (ratio=${heuristic.edgeRatio.toFixed(3)}, avgMag=${heuristic.avgMagnitude.toFixed(1)})`,
                     overall_condition: 'POOR',
                     recommended_action: 'Review image - possible structural damage',
-                    created_at: new Date().toISOString(),
                   }];
 
-                  await createInspection.mutationFn(auto as any);
+                  await createInspection.mutateAsync(auto);
                   toast.warning('Image uploaded - client heuristic detected a probable defect (local check)');
                 } else {
                   toast.success('Image uploaded - client AI found no defects');
@@ -414,37 +412,11 @@ export function useCreateMission() {
         throw new Error('User not authenticated');
       }
 
-      const supabasePayload = {
-        id: uuidv4(),
-        panel_id: mission.panel_id,
-        status: 'OPEN' as const,
-      };
-
       const backendPayload = {
         panel_id: mission.panel_id,
         status: 'OPEN' as const,
       };
 
-      const { error } = await supabase
-        .from('missions')
-        .insert(supabasePayload)
-        .select('id')
-        .single();
-
-      if (!error) return;
-
-      const message = extractErrorMessage(error);
-      const code = (error as any)?.code as string | undefined;
-      const isRlsIssue =
-        code === '42501' ||
-        message.toLowerCase().includes('row-level security') ||
-        message.toLowerCase().includes('permission denied');
-
-      if (!isRlsIssue) {
-        throw new Error(message);
-      }
-
-      // Fallback: create mission through backend API (direct DB connection) when Supabase RLS blocks inserts.
       const response = await apiFetch('/missions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -453,10 +425,10 @@ export function useCreateMission() {
 
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(`Supabase blocked insert (${message}) and backend fallback failed: ${text}`);
+        throw new Error(text || 'Failed to create mission');
       }
 
-      await response.json();
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['missions'] });

@@ -19,6 +19,8 @@ const mockDefects = [
   { type: 'SNOW' as const, confidence: 0.91, description: 'Snow coverage blocking solar radiation' },
 ];
 
+const VISION_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'] as const;
+
 function getRandomMockDefects(count: number = 2) {
   const shuffled = mockDefects.sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count).map(d => ({

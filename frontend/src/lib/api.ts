@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
-const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+const LOCAL_API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+const DEPLOYED_API_BASE_URL = 'https://graduation-project-d7tm.onrender.com/api/v1';
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
@@ -10,8 +11,19 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
 }
 
+function getRawBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (configured) return configured;
+
+  if (typeof window !== 'undefined' && !isLoopbackHost(window.location.hostname)) {
+    return DEPLOYED_API_BASE_URL;
+  }
+
+  return LOCAL_API_BASE_URL;
+}
+
 function getResolvedBaseUrl(): string {
-  const normalized = normalizeBaseUrl(RAW_BASE_URL);
+  const normalized = normalizeBaseUrl(getRawBaseUrl());
   if (typeof window === 'undefined') return normalized;
 
   try {

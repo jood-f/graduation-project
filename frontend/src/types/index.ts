@@ -81,7 +81,7 @@ export interface MissionImage {
   url: string;
 }
 
-export type DefectType = 'CRACK' | 'DUST' | 'HOTSPOT' | 'SNOW';
+export type DefectType = 'CRACK' | 'DUST' | 'HOTSPOT' | 'SNOW' | 'HARDWARE_DAMAGE';
 
 export interface InspectionResult {
   id: string;

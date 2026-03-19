@@ -2,8 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { apiFetch } from '@/lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
-
 export interface MLAnomaly {
   id: string;
   panel_id: string;
@@ -126,7 +124,7 @@ export function useRunMLAnomalyScan() {
       let batchesProcessed = 0;
 
       while (true) {
-        const url = `${API_BASE_URL}/telemetry/anomalies/scan-all?threshold=${threshold}&hours=${hours}&batch_size=${batchSize}&offset=${offset}`;
+        const url = `/telemetry/anomalies/scan-all?threshold=${threshold}&hours=${hours}&batch_size=${batchSize}&offset=${offset}`;
         const response = await apiFetch(url, { method: 'POST' });
 
         if (!response.ok) {
