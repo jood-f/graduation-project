@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 const LOCAL_API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
 const DEPLOYED_API_BASE_URL = 'https://graduation-project-d7tm.onrender.com/api/v1';
+const DEFAULT_API_TIMEOUT_MS = 15000;
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
@@ -74,7 +75,25 @@ async function getAuthHeaders(headers?: HeadersInit): Promise<Headers> {
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = await getAuthHeaders(init.headers);
-  const requestInit = { ...init, headers };
+  const timeoutMs = Number(import.meta.env.VITE_API_TIMEOUT_MS || DEFAULT_API_TIMEOUT_MS);
+  const timeoutController = new AbortController();
+  let detachAbortRelay: (() => void) | undefined;
+
+  if (init.signal) {
+    if (init.signal.aborted) {
+      timeoutController.abort();
+    } else {
+      const relayAbort = () => timeoutController.abort();
+      init.signal.addEventListener('abort', relayAbort, { once: true });
+      detachAbortRelay = () => init.signal?.removeEventListener('abort', relayAbort);
+    }
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    timeoutController.abort();
+  }, Math.max(1, timeoutMs));
+
+  const requestInit = { ...init, headers, signal: timeoutController.signal };
   const primaryUrl = resolveUrl(path);
 
   try {
@@ -93,8 +112,13 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
         // Fall through to the original error.
       }
     }
-
+    if (timeoutController.signal.aborted) {
+      throw new Error(`Request timed out after ${timeoutMs}ms: ${primaryUrl}`);
+    }
     throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    detachAbortRelay?.();
   }
 }
 

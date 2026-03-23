@@ -31,7 +31,7 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("user_id, name, avatar, created_at, role")
+      .select("user_id, name, avatar, created_at")
       .eq("user_id", supabaseUser.id)
       .maybeSingle(),
     supabase
@@ -45,8 +45,7 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null
     console.warn("Error fetching user role:", roleError);
   }
 
-  const profileRole = (profile as ({ role?: string } & typeof profile) | null)?.role;
-  const role: UserRole = normalizeRole(profileRole ?? roleRow?.role ?? "operator");
+  const role: UserRole = normalizeRole(roleRow?.role ?? "operator");
 
   if (profileError) {
     console.error("Error fetching profile:", profileError);
