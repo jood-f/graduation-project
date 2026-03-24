@@ -7,7 +7,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
-from app.models.profile import Profile
 
 UserRole = Literal["admin", "operator"]
 
@@ -29,12 +28,22 @@ def _parse_requester_id(requester_id: str | None) -> uuid.UUID:
 
 def _require_admin(db: Session, requester_id: str | None) -> uuid.UUID:
     requester_uuid = _parse_requester_id(requester_id)
-    requester = (
-        db.query(Profile)
-        .filter(Profile.user_id == requester_uuid)
-        .first()
-    )
-    if requester is None or requester.role != "admin":
+    requester = db.execute(
+        text(
+            """
+            select
+              u.id as user_id,
+              coalesce(ur.role::text, 'operator') as role
+            from auth.users u
+            left join public.profiles p on p.user_id = u.id
+            left join public.user_roles ur on ur.user_id = u.id
+            where u.id = :user_id
+            """
+        ),
+        {"user_id": str(requester_uuid)},
+    ).mappings().first()
+
+    if requester is None or (requester["role"] or "operator").lower() != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return requester_uuid
 
@@ -54,14 +63,15 @@ def list_users(
         text(
             """
             select
-              p.user_id,
+              u.id as user_id,
               coalesce(p.name, split_part(u.email, '@', 1), 'User') as name,
               u.email,
-              p.role,
+              coalesce(ur.role::text, 'operator') as role,
               p.created_at
-            from public.profiles p
-            left join auth.users u on u.id = p.user_id
-            order by p.created_at desc
+            from auth.users u
+            left join public.profiles p on p.user_id = u.id
+            left join public.user_roles ur on ur.user_id = u.id
+            order by p.created_at desc nulls last, u.email asc
             """
         )
     ).mappings().all()
@@ -101,15 +111,42 @@ def update_user_role(
     if requester_uuid == user_id and payload.role != "admin":
         raise HTTPException(status_code=400, detail="You cannot demote yourself from admin")
 
-    profile = db.query(Profile).filter(Profile.user_id == user_id).first()
-    if profile is None:
-        raise HTTPException(status_code=404, detail="User profile not found")
+    target_exists = db.execute(
+        text("select 1 from auth.users where id = :user_id"),
+        {"user_id": str(user_id)},
+    ).first()
+    if target_exists is None:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    profile.role = payload.role
+    db.execute(
+        text(
+            """
+            insert into public.user_roles (user_id, role)
+            values (:user_id, :role)
+            on conflict (user_id) do update set role = excluded.role
+            """
+        ),
+        {"user_id": str(user_id), "role": payload.role},
+    )
+
+    # Backward compatibility: keep profiles.role in sync when that column exists.
+    try:
+        db.execute(
+            text(
+                """
+                update public.profiles
+                set role = :role
+                where user_id = :user_id
+                """
+            ),
+            {"user_id": str(user_id), "role": payload.role},
+        )
+    except Exception:
+        pass
+
     db.commit()
-    db.refresh(profile)
 
     return {
-        "user_id": str(profile.user_id),
-        "role": profile.role,
+        "user_id": str(user_id),
+        "role": payload.role,
     }

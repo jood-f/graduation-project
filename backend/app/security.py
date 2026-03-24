@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from fastapi import Depends, Header, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
-from app.models.profile import Profile
 
 
 VALID_ROLES = {"admin", "operator"}
@@ -37,11 +37,25 @@ def get_current_user(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid user id format") from exc
 
-    profile = db.query(Profile).filter(Profile.user_id == user_id).first()
-    if profile is None:
+    row = db.execute(
+        text(
+            """
+            select
+              u.id as user_id,
+              coalesce(ur.role::text, 'operator') as role
+            from auth.users u
+            left join public.profiles p on p.user_id = u.id
+            left join public.user_roles ur on ur.user_id = u.id
+            where u.id = :user_id
+            """
+        ),
+        {"user_id": str(user_id)},
+    ).mappings().first()
+
+    if row is None:
         raise HTTPException(status_code=403, detail="User profile not found")
 
-    return AuthUser(id=user_id, role=_normalize_role(profile.role))
+    return AuthUser(id=user_id, role=_normalize_role(row["role"]))
 
 
 def require_roles(roles: Iterable[str]):
@@ -57,4 +71,3 @@ def require_roles(roles: Iterable[str]):
         return current_user
 
     return _role_dependency
-

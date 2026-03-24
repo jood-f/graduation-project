@@ -1,0 +1,22 @@
+.git
+.github
+.vscode
+.idea
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+backend/.env
+frontend/
+qa/
+
+# Ignore large CV training datasets and generated artifacts that are not needed
+# by the production inference container.
+CV/DET_ROOT/
+CV/OUT_SPLIT/
+CV/Solar_panel_Images/
+CV/train/
+

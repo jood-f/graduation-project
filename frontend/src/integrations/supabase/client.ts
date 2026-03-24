@@ -2,8 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const FALLBACK_SUPABASE_URL = 'https://example.supabase.co';
-const FALLBACK_SUPABASE_PUBLISHABLE_KEY = 'public-anon-key';
+const FALLBACK_SUPABASE_URL = 'https://bstgjdjelkyftqqptxby.supabase.co';
+const FALLBACK_SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzdGdqZGplbGt5ZnRxcXB0eGJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2OTkxNTAsImV4cCI6MjA4NTI3NTE1MH0.2VkC84ubpP7bkHjX2nUJAExZ4r_4gyuJeD40MPX513A';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY =
