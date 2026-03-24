@@ -2,6 +2,28 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { apiFetch } from '@/lib/api';
 
+async function readApiError(response: Response): Promise<string> {
+  const contentType = response.headers.get('content-type')?.toLowerCase() || '';
+
+  if (contentType.includes('application/json')) {
+    try {
+      const payload = await response.json() as { detail?: unknown; message?: unknown };
+      if (typeof payload.detail === 'string' && payload.detail.trim()) {
+        return payload.detail;
+      }
+      if (typeof payload.message === 'string' && payload.message.trim()) {
+        return payload.message;
+      }
+      return JSON.stringify(payload);
+    } catch {
+      return `Request failed (${response.status})`;
+    }
+  }
+
+  const text = await response.text();
+  return text || `Request failed (${response.status})`;
+}
+
 export interface Fault {
   id: string;
   panel_id: string;
@@ -100,11 +122,15 @@ export function useMissionFaults(missionId: string | null) {
         `/inspection-results/cv-anomalies?mission_id=${encodeURIComponent(missionId)}`
       );
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Failed to fetch mission CV anomalies');
+        throw new Error(await readApiError(response));
       }
 
-      const rows = (await response.json()) as CVAnomalyRow[];
+      const payload = await response.json();
+      if (!Array.isArray(payload)) {
+        throw new Error('Mission CV anomalies response was not a list');
+      }
+
+      const rows = payload as CVAnomalyRow[];
 
       return rows.map((row) => ({
         id: row.id,

@@ -25,6 +25,34 @@ def _normalize_role(role: str | None) -> str:
     return normalized
 
 
+def load_auth_user(db: Session, user_id: uuid.UUID) -> AuthUser | None:
+    row = db.execute(
+        text(
+            """
+            with requested_user as (
+              select cast(:user_id as uuid) as user_id
+            )
+            select
+              requested_user.user_id as user_id,
+              coalesce(ur.role::text, p.role::text, 'operator') as role
+            from requested_user
+            left join auth.users u on u.id = requested_user.user_id
+            left join public.profiles p on p.user_id = requested_user.user_id
+            left join public.user_roles ur on ur.user_id = requested_user.user_id
+            where u.id is not null
+               or p.user_id is not null
+               or ur.user_id is not null
+            """
+        ),
+        {"user_id": str(user_id)},
+    ).mappings().first()
+
+    if row is None:
+        return None
+
+    return AuthUser(id=user_id, role=_normalize_role(row["role"]))
+
+
 def get_current_user(
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     db: Session = Depends(get_db),
@@ -37,25 +65,17 @@ def get_current_user(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid user id format") from exc
 
-    row = db.execute(
-        text(
-            """
-            select
-              u.id as user_id,
-              coalesce(ur.role::text, 'operator') as role
-            from auth.users u
-            left join public.profiles p on p.user_id = u.id
-            left join public.user_roles ur on ur.user_id = u.id
-            where u.id = :user_id
-            """
-        ),
-        {"user_id": str(user_id)},
-    ).mappings().first()
+    auth_user = load_auth_user(db, user_id)
+    if auth_user is None:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "User not found in backend auth/profile tables. "
+                "Confirm the backend DATABASE_URL and Supabase project match the frontend login project."
+            ),
+        )
 
-    if row is None:
-        raise HTTPException(status_code=403, detail="User profile not found")
-
-    return AuthUser(id=user_id, role=_normalize_role(row["role"]))
+    return auth_user
 
 
 def require_roles(roles: Iterable[str]):

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
+from app.security import load_auth_user
 
 UserRole = Literal["admin", "operator"]
 
@@ -28,22 +29,9 @@ def _parse_requester_id(requester_id: str | None) -> uuid.UUID:
 
 def _require_admin(db: Session, requester_id: str | None) -> uuid.UUID:
     requester_uuid = _parse_requester_id(requester_id)
-    requester = db.execute(
-        text(
-            """
-            select
-              u.id as user_id,
-              coalesce(ur.role::text, 'operator') as role
-            from auth.users u
-            left join public.profiles p on p.user_id = u.id
-            left join public.user_roles ur on ur.user_id = u.id
-            where u.id = :user_id
-            """
-        ),
-        {"user_id": str(requester_uuid)},
-    ).mappings().first()
+    requester = load_auth_user(db, requester_uuid)
 
-    if requester is None or (requester["role"] or "operator").lower() != "admin":
+    if requester is None or requester.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return requester_uuid
 

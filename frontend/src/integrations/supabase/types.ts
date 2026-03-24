@@ -17,27 +17,36 @@ export type Database = {
       mission_images: {
         Row: {
           content_type: string
+          height: number
           id: string
           mission_id: string
+          storage_key: string
           storage_path: string
           uploaded_at: string
-          uploaded_by_user_id: string
+          uploaded_by_user_id: string | null
+          width: number
         }
         Insert: {
           content_type?: string
+          height?: number
           id?: string
           mission_id: string
+          storage_key: string
           storage_path: string
           uploaded_at?: string
-          uploaded_by_user_id: string
+          uploaded_by_user_id?: string | null
+          width?: number
         }
         Update: {
           content_type?: string
+          height?: number
           id?: string
           mission_id?: string
+          storage_key?: string
           storage_path?: string
           uploaded_at?: string
-          uploaded_by_user_id?: string
+          uploaded_by_user_id?: string | null
+          width?: number
         }
         Relationships: [
           {
@@ -52,29 +61,20 @@ export type Database = {
       missions: {
         Row: {
           created_at: string
-          created_by_user_id: string
           id: string
           panel_id: string
-          panel_label: string
-          site_name: string
           status: string
         }
         Insert: {
           created_at?: string
-          created_by_user_id: string
-          id?: string
+          id: string
           panel_id: string
-          panel_label: string
-          site_name: string
           status?: string
         }
         Update: {
           created_at?: string
-          created_by_user_id?: string
           id?: string
           panel_id?: string
-          panel_label?: string
-          site_name?: string
           status?: string
         }
         Relationships: []

@@ -16,6 +16,17 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function buildFallbackUser(supabaseUser: SupabaseUser, role: UserRole = "operator"): User {
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email || "",
+    name: supabaseUser.email?.split("@")[0] || "User",
+    role,
+    avatar: undefined,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null> {
   const normalizeRole = (r: string): UserRole => {
     const normalized = r.toLowerCase().replace(/\s+/g, "_");
@@ -49,14 +60,7 @@ async function fetchUserProfile(supabaseUser: SupabaseUser): Promise<User | null
 
   if (profileError) {
     console.error("Error fetching profile:", profileError);
-    return {
-      id: supabaseUser.id,
-      email: supabaseUser.email || "",
-      name: supabaseUser.email?.split("@")[0] || "User",
-      role,
-      avatar: undefined,
-      createdAt: new Date().toISOString(),
-    };
+    return buildFallbackUser(supabaseUser, role);
   }
 
   return {
@@ -89,15 +93,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setIsLoading(true);
-      const u = await fetchUserProfile(newSession.user);
-      if (!isMounted) return;
-      setUser(u);
-      setIsLoading(false);
+      try {
+        const u = await fetchUserProfile(newSession.user);
+        if (!isMounted) return;
+        setUser(u);
+      } catch (error) {
+        console.error("Failed to load authenticated user profile:", error);
+        if (!isMounted) return;
+        setUser(buildFallbackUser(newSession.user));
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     };
 
-    supabase.auth.getSession().then(({ data }) => {
-      handleSession(data.session ?? null);
-    });
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        handleSession(data.session ?? null);
+      })
+      .catch((error) => {
+        console.error("Failed to restore Supabase session:", error);
+        if (!isMounted) return;
+        setSession(null);
+        setUser(null);
+        setIsLoading(false);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       handleSession(newSession);

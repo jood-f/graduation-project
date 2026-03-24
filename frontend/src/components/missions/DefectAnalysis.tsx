@@ -1,14 +1,15 @@
-import { FC, useState } from 'react';
+import { FC } from 'react';
 import { AlertTriangle, CheckCircle, Droplet, Flame, Snowflake, Sparkles, Wrench, XCircle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMissionFaults } from '@/hooks/useFaults';
+import { useMissionFaults, type MissionFault } from '@/hooks/useFaults';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
+import { useInspectionStore } from '@/stores/inspectionStore';
 
 interface DefectAnalysisProps {
   missionId: string;
@@ -59,7 +60,12 @@ type ImageDebugResult = {
 
 const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missionImages }) => {
   const queryClient = useQueryClient();
-  const { data: results, isLoading, error } = useMissionFaults(missionId);
+  const {
+    data: summaryResults,
+    isLoading,
+    error,
+    refetch: refetchSummaryResults,
+  } = useMissionFaults(missionId);
 
   const reanalyzeMutation = useMutation({
     mutationFn: async ({ imageId, threshold = 0.5 }: { imageId: string; threshold?: number }) => {
@@ -114,6 +120,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
   const {
     data: rawByImage,
     isLoading: rawLoading,
+    refetch: refetchRawByImage,
   } = useQuery({
     queryKey: ['mission-cv-raw-by-image', missionId, missionImages.map((img) => img.id).join(',')],
     queryFn: async (): Promise<ImageDebugResult[]> => {
@@ -154,61 +161,61 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
     enabled: imageCount > 0 && missionImages.length > 0,
   });
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            AI Defect Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const imagePathById = new Map(missionImages.map((image) => [image.id, image.storage_path]));
+  const summaryErrorMessage = error instanceof Error ? error.message : 'Failed to load defect analysis.';
 
-  if (error) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            AI Defect Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <p className="text-sm font-medium text-destructive">Failed to load defect analysis. Please try again.</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const rawFallbackResults: MissionFault[] = (rawByImage || []).flatMap((item) =>
+    item.detections
+      .filter((detection) => detection.status === 'FAIL')
+      .map((detection) => ({
+        id: detection.inspection_id,
+        panel_id: '',
+        fault_type: detection.class_name || 'Unknown Defect',
+        confidence: detection.confidence ?? 0,
+        detected_at: new Date().toISOString(),
+        mission_id: missionId,
+        mission_image_id: item.imageId,
+        bbox: detection.bbox,
+        status: detection.status,
+        storage_path: item.storagePath,
+        model_version: detection.model_version ?? null,
+        panel_label: 'Unknown',
+        site_name: 'Unknown Site',
+      }))
+  );
 
-  if (imageCount < 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            AI Defect Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const localFallbackResults: MissionFault[] = useInspectionStore.getResultsByMission(missionId).map((result) => ({
+    id: result.id,
+    panel_id: '',
+    fault_type: result.defect_type,
+    confidence: result.confidence,
+    detected_at: result.created_at,
+    mission_id: missionId,
+    mission_image_id: result.mission_image_id ?? null,
+    bbox:
+      result.bbox_width != null && result.bbox_height != null
+        ? {
+            x: result.bbox_x ?? 0,
+            y: result.bbox_y ?? 0,
+            width: result.bbox_width,
+            height: result.bbox_height,
+          }
+        : null,
+    status: 'FAIL',
+    storage_path: result.mission_image_id ? imagePathById.get(result.mission_image_id) || null : null,
+    model_version: 'client-heuristic-v1',
+    panel_label: 'Unknown',
+    site_name: 'Unknown Site',
+  }));
+
+  const fallbackResults = rawFallbackResults.length > 0 ? rawFallbackResults : localFallbackResults;
+  const usingRawFallback = (!summaryResults || summaryResults.length === 0) && rawFallbackResults.length > 0;
+  const usingLocalFallback =
+    (!summaryResults || summaryResults.length === 0) &&
+    rawFallbackResults.length === 0 &&
+    localFallbackResults.length > 0;
+  const results = summaryResults && summaryResults.length > 0 ? summaryResults : fallbackResults;
+  const waitingForFallbackResults = !!error && rawLoading && results.length === 0;
 
   const renderRawDebugSection = () => (
     <div className="space-y-3 border-t pt-4">
@@ -318,6 +325,25 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
     </div>
   );
 
+  if (isLoading || waitingForFallbackResults || imageCount < 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI Defect Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (imageCount === 0) {
     return (
       <Card>
@@ -339,7 +365,39 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
     );
   }
 
-  if (!results || results.length === 0) {
+  if (error && results.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI Defect Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <p className="text-sm font-medium text-destructive">Failed to load defect analysis.</p>
+            <p className="mt-2 max-w-xl text-xs text-muted-foreground">{summaryErrorMessage}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => {
+                void refetchSummaryResults();
+                void refetchRawByImage();
+              }}
+            >
+              Try Again
+            </Button>
+          </div>
+          {renderRawDebugSection()}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (results.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -388,6 +446,25 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {(usingRawFallback || usingLocalFallback || error) && (
+          <div
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm',
+              error ? 'border-warning/30 bg-warning/10 text-warning' : 'border-primary/20 bg-primary/5 text-primary'
+            )}
+          >
+            {usingRawFallback
+              ? error
+                ? `Mission summary request failed, so this view is using image-level detections instead. ${summaryErrorMessage}`
+                : 'This view is using image-level detections because no summarized defects were returned.'
+              : usingLocalFallback
+              ? error
+                ? `Mission summary request failed, so this view is using locally cached detections instead. ${summaryErrorMessage}`
+                : 'This view is using locally cached detections from the current session.'
+              : summaryErrorMessage}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {Object.entries(defectsByType).map(([type, defects]) => {
             const Icon = defectIcons[type as keyof typeof defectIcons] || AlertTriangle;

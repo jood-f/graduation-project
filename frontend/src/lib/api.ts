@@ -28,6 +28,14 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
 }
 
+function isLoopbackUrl(url: string): boolean {
+  try {
+    return isLoopbackHost(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function uniqueUrls(urls: Array<string | undefined | null>): string[] {
   return [...new Set(urls.map((url) => url?.trim()).filter((url): url is string => !!url))];
 }
@@ -50,10 +58,17 @@ function getConfiguredBaseUrls(): string[] {
   const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
   const configuredOrigin = import.meta.env.VITE_API_ORIGIN?.trim();
 
-  return uniqueUrls([
+  const configured = uniqueUrls([
     configuredBaseUrl ? withApiPrefix(configuredBaseUrl) : undefined,
     configuredOrigin ? withApiPrefix(configuredOrigin) : undefined,
   ]);
+
+  if (typeof window === 'undefined' || isLoopbackHost(window.location.hostname)) {
+    return configured;
+  }
+
+  const remoteSafeConfigured = configured.filter((url) => !isLoopbackUrl(url));
+  return remoteSafeConfigured.length > 0 ? remoteSafeConfigured : [];
 }
 
 function getBaseUrlCandidates(): string[] {
@@ -69,8 +84,8 @@ function getBaseUrlCandidates(): string[] {
   if (remoteClient) {
     return uniqueUrls([
       ...configured,
-      sameOriginBaseUrl,
       DEPLOYED_API_BASE_URL,
+      sameOriginBaseUrl,
       LOCAL_API_BASE_URL,
     ]);
   }
@@ -85,6 +100,11 @@ function getBaseUrlCandidates(): string[] {
 
 function isRetriableResponse(response: Response): boolean {
   return [404, 405, 502, 503, 504].includes(response.status);
+}
+
+function isUnexpectedHtmlResponse(response: Response): boolean {
+  const contentType = response.headers.get('content-type')?.toLowerCase() || '';
+  return response.ok && contentType.includes('text/html');
 }
 
 function resolveUrl(path: string, baseUrl: string): string {
@@ -111,9 +131,13 @@ function resolveUrl(path: string, baseUrl: string): string {
 async function getAuthHeaders(headers?: HeadersInit): Promise<Headers> {
   const merged = new Headers(headers || {});
   const { data } = await supabase.auth.getSession();
-  const userId = data.session?.user?.id;
+  const session = data.session;
+  const userId = session?.user?.id;
   if (userId) {
     merged.set('X-User-Id', userId);
+  }
+  if (session?.access_token && !merged.has('Authorization')) {
+    merged.set('Authorization', `Bearer ${session.access_token}`);
   }
   return merged;
 }
@@ -152,9 +176,14 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       try {
         const response = await fetch(requestUrl, requestInit);
         const hasMoreCandidates = index < resolvedUrls.length - 1;
-        if (!hasMoreCandidates || response.ok || !isRetriableResponse(response)) {
+        const shouldRetry =
+          hasMoreCandidates &&
+          (isRetriableResponse(response) || isUnexpectedHtmlResponse(response));
+
+        if (!shouldRetry) {
           return response;
         }
+
         lastError = new Error(`Request failed (${response.status}) for ${requestUrl}`);
       } catch (error) {
         lastError = error;

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,7 +17,6 @@ export interface Mission {
   site_name: string;
   status: string;
   created_at: string;
-  created_by_user_id?: string | null;
 }
 
 interface MissionRow {
@@ -45,7 +45,7 @@ export interface MissionImage {
   mission_id: string;
   storage_path: string;
   content_type: string;
-  uploaded_by_user_id: string;
+  uploaded_by_user_id: string | null;
   uploaded_at: string;
   url?: string;
 }
@@ -76,7 +76,6 @@ export function useMissions() {
         created_at: row.created_at,
         panel_label: row.panels?.label || 'Unknown Panel',
         site_name: row.panels?.sites?.name || 'Unknown Site',
-        created_by_user_id: null,
       })) as Mission[];
     },
   });
@@ -412,32 +411,38 @@ export function useCreateMission() {
         throw new Error('User not authenticated');
       }
 
-      const backendPayload = {
+      const payload: TablesInsert<'missions'> = {
+        id: uuidv4(),
         panel_id: mission.panel_id,
-        status: 'OPEN' as const,
+        status: 'OPEN',
+        created_at: new Date().toISOString(),
       };
 
-      const response = await apiFetch('/missions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(backendPayload),
-      });
+      const { data, error } = await supabase
+        .from('missions')
+        .insert(payload)
+        .select(`
+          id,
+          panel_id,
+          status,
+          created_at
+        `)
+        .single();
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Failed to create mission');
+      if (error) {
+        throw error;
       }
 
-      return await response.json();
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['missions'] });
-      toast.success('Mission created successfully!');
+      toast.success('Inspection created successfully!');
     },
     onError: (error) => {
-      console.error('Error creating mission:', error);
+      console.error('Error creating inspection:', error);
       const message = extractErrorMessage(error);
-      toast.error(`Failed to create mission: ${message}`);
+      toast.error(`Failed to create inspection: ${message}`);
     },
   });
 }

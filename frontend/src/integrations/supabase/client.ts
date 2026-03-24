@@ -5,13 +5,25 @@ import type { Database } from './types';
 const FALLBACK_SUPABASE_URL = 'https://bstgjdjelkyftqqptxby.supabase.co';
 const FALLBACK_SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzdGdqZGplbGt5ZnRxcXB0eGJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2OTkxNTAsImV4cCI6MjA4NTI3NTE1MH0.2VkC84ubpP7bkHjX2nUJAExZ4r_4gyuJeD40MPX513A';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
+const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+const configuredSupabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+const allowDevelopmentFallback = import.meta.env.DEV;
 
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
-  console.error(
-    'Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in frontend/.env.'
+const SUPABASE_URL =
+  configuredSupabaseUrl || (allowDevelopmentFallback ? FALLBACK_SUPABASE_URL : '');
+const SUPABASE_PUBLISHABLE_KEY =
+  configuredSupabasePublishableKey ||
+  (allowDevelopmentFallback ? FALLBACK_SUPABASE_PUBLISHABLE_KEY : '');
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  throw new Error(
+    'Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.'
+  );
+}
+
+if (allowDevelopmentFallback && (!configuredSupabaseUrl || !configuredSupabasePublishableKey)) {
+  console.warn(
+    'Using development Supabase fallback values. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to match the intended project.'
   );
 }
 
