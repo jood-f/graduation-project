@@ -34,7 +34,7 @@ def load_auth_user(db: Session, user_id: uuid.UUID) -> AuthUser | None:
             )
             select
               requested_user.user_id as user_id,
-              coalesce(ur.role::text, p.role::text, 'operator') as role
+              coalesce(ur.role::text, 'operator') as role
             from requested_user
             left join auth.users u on u.id = requested_user.user_id
             left join public.profiles p on p.user_id = requested_user.user_id
