@@ -35,7 +35,7 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
   );
 
   const content = (isMobile: boolean) => (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+    <div className="flex h-full flex-col overflow-y-auto bg-sidebar text-sidebar-foreground touch-scroll">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
         <img src={logo} alt="SolarSense Logo" className="h-10 w-10 object-contain" />
@@ -53,6 +53,7 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
               onClick={() => {
                 if (isMobile) onMobileOpenChange?.(false);
               }}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
@@ -86,14 +87,14 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
 
   return (
     <>
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 md:block">
+      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 md:block md:h-[100svh]">
         {content(false)}
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
         <SheetContent
           side="left"
-          className="w-64 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground [&>button]:border [&>button]:border-sidebar-border [&>button]:bg-sidebar-accent/40 [&>button]:text-sidebar-foreground [&>button]:opacity-100 [&>button]:hover:bg-sidebar-accent [&>button]:hover:opacity-100"
+          className="w-[85vw] max-w-xs border-sidebar-border bg-sidebar p-0 text-sidebar-foreground [&>button]:border [&>button]:border-sidebar-border [&>button]:bg-sidebar-accent/40 [&>button]:text-sidebar-foreground [&>button]:opacity-100 [&>button]:hover:bg-sidebar-accent [&>button]:hover:opacity-100"
         >
           {content(true)}
         </SheetContent>

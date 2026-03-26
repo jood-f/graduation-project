@@ -43,13 +43,13 @@ function FaultItem({ fault }: FaultItemProps) {
   const severity = getSeverity(fault.confidence);
   
   return (
-    <div className="flex items-start gap-4 rounded-lg border p-4">
-      <div className={cn('rounded-lg p-2', severityStyles[severity])}>
+    <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:gap-4">
+      <div className={cn('w-fit rounded-lg p-2', severityStyles[severity])}>
         <Icon className="h-4 w-4" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{fault.panel_label || 'Unknown Panel'}</span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <span className="break-words font-medium">{fault.panel_label || 'Unknown Panel'}</span>
           <Badge variant="outline" className="text-xs">
             {fault.site_name || 'Unknown Site'}
           </Badge>
@@ -61,7 +61,7 @@ function FaultItem({ fault }: FaultItemProps) {
           {new Date(fault.detected_at).toLocaleString()}
         </p>
       </div>
-      <Badge className={cn('shrink-0', severityStyles[severity])}>
+      <Badge className={cn('w-fit shrink-0', severityStyles[severity])}>
         {severity}
       </Badge>
     </div>

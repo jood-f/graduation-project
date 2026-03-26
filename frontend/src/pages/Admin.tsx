@@ -118,7 +118,7 @@ export default function Admin() {
     <MainLayout title="Admin Panel">
       <div className="space-y-6">
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -170,46 +170,42 @@ export default function Admin() {
             ) : error ? (
               <p className="text-sm text-destructive">Failed to load users: {(error as Error).message}</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Current Role</TableHead>
-                    <TableHead>Member Since</TableHead>
-                    <TableHead className="text-right">Change Role</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                <div className="space-y-4 md:hidden">
                   {users.map((user) => (
-                    <TableRow key={user.user_id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
-                            {user.name?.charAt(0) || 'U'}
-                          </div>
-                          <span>{user.name}</span>
-                          {user.user_id === currentUser?.id && (
-                            <Badge variant="outline" className="text-xs">You</Badge>
-                          )}
+                    <div key={user.user_id} className="space-y-4 rounded-lg border p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium">
+                          {user.name?.charAt(0) || 'U'}
                         </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{user.email || 'N/A'}</TableCell>
-                      <TableCell>
-                        <Badge className={roleColors[user.role]}>
-                          {roleLabels[user.role]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
-                      </TableCell>
-                      <TableCell className="text-right">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{user.name || 'Unnamed User'}</p>
+                            {user.user_id === currentUser?.id && (
+                              <Badge variant="outline" className="text-xs">You</Badge>
+                            )}
+                          </div>
+                          <p className="break-all text-sm text-muted-foreground">{user.email || 'N/A'}</p>
+                        </div>
+                      </div>
+                      <div className="grid gap-3 text-sm sm:grid-cols-2">
+                        <div>
+                          <p className="text-muted-foreground">Current role</p>
+                          <Badge className={roleColors[user.role]}>{roleLabels[user.role]}</Badge>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Member since</p>
+                          <p>{user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">Change role</p>
                         <Select
                           value={user.role}
                           onValueChange={(value) => handleRoleChange(user.user_id, value as UserRole)}
                           disabled={updateRoleMutation.isPending}
                         >
-                          <SelectTrigger className="w-32 ml-auto">
+                          <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -217,18 +213,69 @@ export default function Admin() {
                             <SelectItem value="operator">Operator</SelectItem>
                           </SelectContent>
                         </Select>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </div>
                   ))}
-                  {users.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No users found
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                </div>
+
+                <div className="hidden md:block">
+                  <Table className="min-w-[52rem]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Current Role</TableHead>
+                        <TableHead>Member Since</TableHead>
+                        <TableHead className="text-right">Change Role</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((user) => (
+                        <TableRow key={user.user_id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
+                                {user.name?.charAt(0) || 'U'}
+                              </div>
+                              <span className="max-w-[14rem] truncate">{user.name}</span>
+                              {user.user_id === currentUser?.id && (
+                                <Badge variant="outline" className="text-xs">You</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="break-all text-muted-foreground">{user.email || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Badge className={roleColors[user.role]}>
+                              {roleLabels[user.role]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Select
+                              value={user.role}
+                              onValueChange={(value) => handleRoleChange(user.user_id, value as UserRole)}
+                              disabled={updateRoleMutation.isPending}
+                            >
+                              <SelectTrigger className="ml-auto w-36">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="operator">Operator</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+            {!isLoading && !error && users.length === 0 && (
+              <p className="py-8 text-center text-muted-foreground">No users found</p>
             )}
           </CardContent>
         </Card>

@@ -89,10 +89,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="app-screen flex items-center justify-center bg-background px-4 py-6 sm:py-10">
       {showResetForm ? (
         <Card className="w-full max-w-md">
-          <CardHeader className="text-center space-y-4">
+          <CardHeader className="space-y-4 text-center">
             <div className="flex justify-center">
               <img src={SolarSenseLogo} alt="SolarSense" className="h-16 w-auto" />
             </div>
@@ -120,7 +120,7 @@ export default function Login() {
         </Card>
       ) : (
         <Card className="w-full max-w-md">
-          <CardHeader className="text-center space-y-4">
+          <CardHeader className="space-y-4 text-center">
             <div className="flex justify-center">
               <img src={SolarSenseLogo} alt="SolarSense" className="h-16 w-auto" />
             </div>
@@ -153,7 +153,7 @@ export default function Login() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <div className="flex justify-between items-center">
+                      <div className="flex items-center justify-between gap-3">
                         <FormLabel>Password</FormLabel>
                         <button
                           type="button"
@@ -194,7 +194,7 @@ export default function Login() {
             </Form>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-center text-sm text-muted-foreground">
               Don't have an account?{' '}
               <Link to="/signup" className="text-primary hover:underline font-medium">
                 Sign up

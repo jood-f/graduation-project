@@ -57,9 +57,9 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="app-screen flex items-center justify-center bg-background px-4 py-6 sm:py-10">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center space-y-4">
+        <CardHeader className="space-y-4 text-center">
           <div className="flex justify-center">
             <img src={SolarSenseLogo} alt="SolarSense" className="h-16 w-auto" />
           </div>
@@ -71,7 +71,7 @@ export default function ResetPassword() {
             <label className="text-sm font-medium">New Password</label>
             <Input
               type="password"
-              placeholder="••••••••"
+              placeholder="Enter a new password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -80,7 +80,7 @@ export default function ResetPassword() {
             <label className="text-sm font-medium">Confirm Password</label>
             <Input
               type="password"
-              placeholder="••••••••"
+              placeholder="Repeat the new password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />

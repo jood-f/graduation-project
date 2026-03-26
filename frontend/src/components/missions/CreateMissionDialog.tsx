@@ -64,8 +64,17 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
     : [];
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          onOpenChange(true);
+          return;
+        }
+        handleClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New Inspection</DialogTitle>
           <DialogDescription>
@@ -144,13 +153,13 @@ export function CreateMissionDialog({ open, onOpenChange }: CreateMissionDialogP
             />
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleClose}>
+              <Button type="button" variant="outline" onClick={handleClose} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={createMutation.isPending || sitesLoading || panelsLoading}>
+              <Button type="submit" disabled={createMutation.isPending || sitesLoading || panelsLoading} className="w-full sm:w-auto">
                 {createMutation.isPending ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Creating...
                   </>
                 ) : (

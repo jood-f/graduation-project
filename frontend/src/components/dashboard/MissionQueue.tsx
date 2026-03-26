@@ -18,13 +18,13 @@ function MissionItem({ mission }: { mission: Mission }) {
   const StatusIcon = status.icon;
   
   return (
-    <div className="flex items-center gap-4 rounded-lg border p-4">
-      <div className={cn('rounded-lg p-2', status.bg)}>
+    <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:gap-4">
+      <div className={cn('w-fit rounded-lg p-2', status.bg)}>
         <Camera className="h-4 w-4" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{mission.panel_label || 'Unknown Panel'}</span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <span className="break-words font-medium">{mission.panel_label || 'Unknown Panel'}</span>
           <Badge variant="outline" className="text-xs">
             {mission.site_name || 'Unknown Site'}
           </Badge>
@@ -33,7 +33,7 @@ function MissionItem({ mission }: { mission: Mission }) {
           Created {new Date(mission.created_at).toLocaleDateString()}
         </p>
       </div>
-      <Badge className={cn('shrink-0 gap-1', status.bg)}>
+      <Badge className={cn('w-fit shrink-0 gap-1', status.bg)}>
         <StatusIcon className="h-3 w-3" />
         {mission.status === 'OPEN' ? 'Open' : 'Completed'}
       </Badge>

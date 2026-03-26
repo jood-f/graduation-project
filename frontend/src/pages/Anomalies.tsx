@@ -107,11 +107,11 @@ export default function Anomalies() {
     <MainLayout title="Anomalies">
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <CardTitle>Detected Anomalies ({filteredAnomalies.length})</CardTitle>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid w-full gap-2 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap">
               <Select value={modelFilter} onValueChange={setModelFilter}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-full sm:w-[160px]">
                   <SelectValue placeholder="All Models" />
                 </SelectTrigger>
                 <SelectContent>
@@ -121,7 +121,7 @@ export default function Anomalies() {
                 </SelectContent>
               </Select>
               <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-full sm:w-[160px]">
                   <SelectValue placeholder="All Severity" />
                 </SelectTrigger>
                 <SelectContent>
@@ -132,7 +132,7 @@ export default function Anomalies() {
                 </SelectContent>
               </Select>
               <Select value={siteFilter} onValueChange={setSiteFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:col-span-2 xl:w-[200px]">
                   <SelectValue placeholder="All Sites" />
                 </SelectTrigger>
                 <SelectContent>
@@ -155,48 +155,78 @@ export default function Anomalies() {
               ))}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Panel</TableHead>
-                  <TableHead>Site</TableHead>
-                  <TableHead>Model</TableHead>
-                  <TableHead>Confidence</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Detected</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="space-y-4 md:hidden">
                 {filteredAnomalies.map((item) => {
                   const severity = item.severity as Severity;
                   return (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{item.anomaly_type}</span>
+                    <div key={item.id} className="space-y-3 rounded-lg border p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="font-medium">{item.anomaly_type}</p>
+                          <p className="text-sm text-muted-foreground">{item.panel_label}</p>
+                          <p className="text-sm text-muted-foreground">{item.site_name}</p>
                         </div>
-                      </TableCell>
-                      <TableCell className="font-medium">{item.panel_label}</TableCell>
-                      <TableCell>{item.site_name}</TableCell>
-                      <TableCell>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
                         <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}%` : '-'}
-                      </TableCell>
-                      <TableCell>
                         <Badge className={cn(severityStyles[severity])}>{severity}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(item.detected_at).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
+                        <Badge variant="outline">
+                          {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}% confidence` : 'No confidence'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{new Date(item.detected_at).toLocaleString()}</p>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </div>
+
+              <div className="hidden md:block">
+                <Table className="min-w-[50rem]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Panel</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead>Confidence</TableHead>
+                      <TableHead>Severity</TableHead>
+                      <TableHead>Detected</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAnomalies.map((item) => {
+                      const severity = item.severity as Severity;
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm">{item.anomaly_type}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{item.panel_label}</TableCell>
+                          <TableCell>{item.site_name}</TableCell>
+                          <TableCell>
+                            <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}%` : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={cn(severityStyles[severity])}>{severity}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(item.detected_at).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
           {!isLoading && filteredAnomalies.length === 0 && (
             <p className="py-8 text-center text-muted-foreground">No anomalies found for the selected filters.</p>

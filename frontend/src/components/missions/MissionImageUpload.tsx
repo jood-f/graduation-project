@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { type DragEvent, type KeyboardEvent, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -23,37 +23,70 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [enableAI, setEnableAI] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const uploadMutation = useUploadMissionImage();
+
+  const handleIncomingFiles = (incoming: File[]) => {
+    const valid: File[] = [];
+    const rejected: string[] = [];
+    const seen = new Set<string>();
+
+    incoming.forEach((file) => {
+      const dedupeKey = `${file.name}:${file.size}:${file.lastModified}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+
+      if (!ACCEPTED_TYPES.has(file.type)) {
+        rejected.push(`${file.name} (unsupported type)`);
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        rejected.push(`${file.name} (>10MB)`);
+        return;
+      }
+
+      valid.push(file);
+    });
+
+    setSelectedFiles(valid);
+    if (rejected.length > 0) {
+      toast.error(`Skipped ${rejected.length} invalid file(s). Use JPG, PNG, WEBP up to 10MB.`);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const incoming = Array.from(e.target.files);
-      const valid: File[] = [];
-      const rejected: string[] = [];
-      const seen = new Set<string>();
+      handleIncomingFiles(Array.from(e.target.files));
+      e.target.value = '';
+    }
+  };
 
-      incoming.forEach((file) => {
-        const dedupeKey = `${file.name}:${file.size}:${file.lastModified}`;
-        if (seen.has(dedupeKey)) return;
-        seen.add(dedupeKey);
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragActive(false);
+    if (event.dataTransfer.files?.length) {
+      handleIncomingFiles(Array.from(event.dataTransfer.files));
+    }
+  };
 
-        if (!ACCEPTED_TYPES.has(file.type)) {
-          rejected.push(`${file.name} (unsupported type)`);
-          return;
-        }
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragActive(true);
+  };
 
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-          rejected.push(`${file.name} (>10MB)`);
-          return;
-        }
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return;
+    }
+    setIsDragActive(false);
+  };
 
-        valid.push(file);
-      });
-
-      setSelectedFiles(valid);
-      if (rejected.length > 0) {
-        toast.error(`Skipped ${rejected.length} invalid file(s). Use JPG, PNG, WEBP up to 10MB.`);
-      }
+  const handleZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      fileInputRef.current?.click();
     }
   };
 
@@ -92,29 +125,54 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
 
   const handleClose = () => {
     setSelectedFiles([]);
+    setIsDragActive(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          onOpenChange(true);
+          return;
+        }
+        handleClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Upload Images for Analysis</DialogTitle>
           <DialogDescription>
-            Upload panel images for inspection: {missionLabel}
+            Upload panel images for inspection: <span className="break-words">{missionLabel}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div
-            className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 cursor-pointer hover:border-primary/50 transition-colors"
+            role="button"
+            tabIndex={0}
+            aria-label="Select inspection images"
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors sm:p-8 ${
+              isDragActive
+                ? 'border-primary bg-primary/5'
+                : 'border-muted-foreground/25 hover:border-primary/50'
+            }`}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={handleZoneKeyDown}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
-            <ImageIcon className="h-10 w-10 text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground text-center">
+            <ImageIcon className="mb-2 h-10 w-10 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
               Click to select images or drag and drop
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="mt-1 text-xs text-muted-foreground">
               JPG, PNG, WEBP up to 10MB each
             </p>
           </div>
@@ -122,7 +180,7 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
           <Input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             className="hidden"
             onChange={handleFileChange}
@@ -131,9 +189,9 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
           {selectedFiles.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">Selected files:</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {selectedFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-muted text-sm">
+                  <div key={idx} className="flex items-center gap-2 rounded-lg bg-muted p-2 text-sm">
                     <ImageIcon className="h-4 w-4 text-muted-foreground" />
                     <span className="truncate">{file.name}</span>
                   </div>
@@ -142,7 +200,7 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
             </div>
           )}
 
-          <div className="flex items-center space-x-2 p-3 rounded-lg border bg-muted/50">
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-3 sm:flex-row sm:items-center sm:space-x-2">
             <Switch
               id="ai-analysis"
               checked={enableAI}
@@ -161,21 +219,22 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">
             Cancel
           </Button>
           <Button
             onClick={handleUpload}
             disabled={selectedFiles.length === 0 || uploadMutation.isPending || isAnalyzing}
+            className="w-full sm:w-auto"
           >
             {uploadMutation.isPending || isAnalyzing ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 {isAnalyzing ? 'Analyzing with AI...' : 'Uploading...'}
               </>
             ) : (
               <>
-                <Upload className="h-4 w-4 mr-2" />
+                <Upload className="mr-2 h-4 w-4" />
                 Upload {selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}
               </>
             )}

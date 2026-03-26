@@ -32,6 +32,20 @@ type PanelAnomaly = {
   detected_at: string;
 };
 
+function getDisplayPanelName(panel: Pick<Panel, 'id' | 'label'> | null | undefined) {
+  const label = panel?.label?.trim();
+  if (label) return label;
+  if (!panel?.id) return 'Unknown Panel';
+  return `Panel ${panel.id.slice(0, 4).toUpperCase()}`;
+}
+
+function getDisplaySiteName(panel: Pick<Panel, 'site_id' | 'site_name'> | null | undefined) {
+  const siteName = panel?.site_name?.trim();
+  if (siteName) return siteName;
+  if (!panel?.site_id) return 'Unknown Site';
+  return `Site ${panel.site_id.slice(0, 4).toUpperCase()}`;
+}
+
 export function PanelHeatmap() {
   const [selectedPanel, setSelectedPanel] = useState<Panel | null>(null);
   const [siteFilter, setSiteFilter] = useState<string>('all');
@@ -52,7 +66,8 @@ export function PanelHeatmap() {
 
   const panelsBySite = useMemo(() => {
     return filteredPanels.reduce((acc, panel) => {
-      const siteName = panel.site_name || sites?.find((s) => s.id === panel.site_id)?.name || 'Unknown Site';
+      const siteName =
+        getDisplaySiteName(panel) || sites?.find((s) => s.id === panel.site_id)?.name || 'Unknown Site';
       if (!acc[siteName]) {
         acc[siteName] = [];
       }
@@ -114,7 +129,7 @@ export function PanelHeatmap() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('telemetry')
-        .select('voltage,current,temperature,timestamp')
+        .select('voltage,current,temperature,light,timestamp')
         .eq('panel_id', selectedPanel!.id)
         .order('timestamp', { ascending: false })
         .limit(1)
@@ -133,39 +148,41 @@ export function PanelHeatmap() {
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" />
-            Panel Health Overview
-          </CardTitle>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select value={siteFilter} onValueChange={setSiteFilter}>
-                <SelectTrigger className="w-[140px] h-8 text-sm">
-                  <SelectValue placeholder="All Sites" />
+        <CardHeader className="space-y-4 pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              Panel Health Overview
+            </CardTitle>
+            <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:justify-end">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <Select value={siteFilter} onValueChange={setSiteFilter}>
+                  <SelectTrigger className="h-10 w-full sm:w-[180px]">
+                    <SelectValue placeholder="All Sites" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Sites</SelectItem>
+                    {sites?.map((site) => (
+                      <SelectItem key={site.id} value={site.id}>
+                        {site.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-10 w-full sm:w-[160px]">
+                  <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Sites</SelectItem>
-                  {sites?.map((site) => (
-                    <SelectItem key={site.id} value={site.id}>
-                      {site.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="OK">OK</SelectItem>
+                  <SelectItem value="WARNING">Warning</SelectItem>
+                  <SelectItem value="FAULT">Fault</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[120px] h-8 text-sm">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="OK">OK</SelectItem>
-                <SelectItem value="WARNING">Warning</SelectItem>
-                <SelectItem value="FAULT">Fault</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -176,29 +193,28 @@ export function PanelHeatmap() {
               <p className="text-sm text-muted-foreground">Showing {filteredPanels.length} active panels from database.</p>
               {Object.entries(panelsBySite).map(([siteName, sitePanels]) => (
                 <div key={siteName}>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     <MapPin className="h-4 w-4" />
                     {siteName}
                   </h4>
-                  <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
                     {sitePanels.map((panel) => {
-                      const shortLabel = panel.label?.split('-').pop() || panel.label || panel.id.slice(0, 4);
+                      const displayPanelName = getDisplayPanelName(panel);
+                      const shortLabel = displayPanelName.replace(/^panel\s+/i, '');
                       return (
                         <button
                           key={panel.id}
                           onClick={() => setSelectedPanel(panel)}
                           className={`
-                            aspect-square rounded-md transition-all duration-200
+                            flex aspect-square min-h-12 items-center justify-center rounded-md text-xs font-medium text-primary-foreground shadow-sm transition-all duration-200
                             ${statusColors[panel.status]}
-                            flex items-center justify-center text-xs font-medium
-                            text-primary-foreground shadow-sm
-                            hover:scale-110 hover:shadow-md
+                            hover:scale-105 hover:shadow-md
                             focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
                           `}
-                          title={`${panel.label || panel.id} - ${panel.status}`}
-                          aria-label={`Open panel ${panel.label || panel.id} details`}
+                          title={`${displayPanelName} - ${panel.status}`}
+                          aria-label={`Open ${displayPanelName} details`}
                         >
-                          {shortLabel}
+                          <span className="max-w-full truncate px-1">{shortLabel}</span>
                         </button>
                       );
                     })}
@@ -211,7 +227,7 @@ export function PanelHeatmap() {
             </div>
           )}
 
-          <div className="mt-6 flex items-center gap-4 text-sm">
+          <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
             <span className="text-muted-foreground">Status:</span>
             <div className="flex items-center gap-2">
               <div className="h-4 w-4 rounded bg-primary" />
@@ -232,32 +248,38 @@ export function PanelHeatmap() {
       <Dialog open={!!selectedPanel} onOpenChange={() => setSelectedPanel(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Panel {selectedPanel?.label || selectedPanel?.id}
+            <DialogTitle className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <span className="break-words">{getDisplayPanelName(selectedPanel)}</span>
               {selectedPanel && <Badge variant={statusBadgeVariants[selectedPanel.status]}>{selectedPanel.status}</Badge>}
             </DialogTitle>
           </DialogHeader>
 
           {selectedPanel && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid gap-4 text-sm sm:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Panel Name</p>
+                  <p className="break-words font-medium">{getDisplayPanelName(selectedPanel)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Site Name</p>
+                  <p className="break-words font-medium">{getDisplaySiteName(selectedPanel)}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 text-sm sm:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Panel ID</p>
                   <p className="font-mono text-xs break-all">{selectedPanel.id}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Site</p>
-                  <p className="font-medium">{selectedPanel.site_name || 'Unknown Site'}</p>
+                  <p className="text-muted-foreground">Serial Number</p>
+                  <p className="break-all rounded bg-muted px-2 py-1 font-mono text-xs">{selectedPanel.serial_number || 'N/A'}</p>
                 </div>
               </div>
 
-              <div className="text-sm space-y-1">
-                <p className="text-muted-foreground">Serial Number</p>
-                <p className="font-mono text-xs bg-muted px-2 py-1 rounded">{selectedPanel.serial_number || 'N/A'}</p>
-              </div>
-
               <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <h4 className="mb-3 flex items-center gap-2 text-sm font-medium">
                   <Zap className="h-4 w-4 text-accent" />
                   Latest Telemetry
                 </h4>
@@ -265,18 +287,22 @@ export function PanelHeatmap() {
                 {telemetryLoading ? (
                   <Skeleton className="h-16 w-full" />
                 ) : latestTelemetry ? (
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-muted/50 rounded-lg p-2">
+                  <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+                    <div className="rounded-lg bg-muted/50 p-2">
                       <p className="text-lg font-semibold text-primary">{latestTelemetry.power.toFixed(2)}W</p>
                       <p className="text-xs text-muted-foreground">Power</p>
                     </div>
-                    <div className="bg-muted/50 rounded-lg p-2">
+                    <div className="rounded-lg bg-muted/50 p-2">
                       <p className="text-lg font-semibold text-primary">{latestTelemetry.voltage.toFixed(2)}V</p>
                       <p className="text-xs text-muted-foreground">Voltage</p>
                     </div>
-                    <div className="bg-muted/50 rounded-lg p-2">
+                    <div className="rounded-lg bg-muted/50 p-2">
                       <p className="text-lg font-semibold text-primary">{latestTelemetry.temperature.toFixed(2)}C</p>
                       <p className="text-xs text-muted-foreground">Temp</p>
+                    </div>
+                    <div className="rounded-lg bg-muted/50 p-2">
+                      <p className="text-lg font-semibold text-primary">{latestTelemetry.light.toFixed(2)}lx</p>
+                      <p className="text-xs text-muted-foreground">Light</p>
                     </div>
                   </div>
                 ) : (
@@ -285,18 +311,18 @@ export function PanelHeatmap() {
               </div>
 
               <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <h4 className="mb-3 flex items-center gap-2 text-sm font-medium">
                   <AlertTriangle className="h-4 w-4 text-warning" />
                   Latest Anomalies
                 </h4>
-                <div className="space-y-2 max-h-40 overflow-auto">
+                <div className="touch-scroll space-y-2 overflow-auto">
                   {(panelAnomalies.get(selectedPanel.id) || []).slice(0, 5).map((anomaly) => (
-                    <div key={anomaly.id} className="bg-warning/10 border border-warning/20 rounded-lg p-2 text-sm">
-                      <div className="flex items-center justify-between gap-2">
+                    <div key={anomaly.id} className="rounded-lg border border-warning/20 bg-warning/10 p-2 text-sm">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <span className="font-medium">{anomaly.type}</span>
-                        <Badge variant="outline" className="text-xs">{anomaly.source} - {anomaly.severity}</Badge>
+                        <Badge variant="outline" className="w-fit text-xs">{anomaly.source} - {anomaly.severity}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{anomaly.message}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{anomaly.message}</p>
                     </div>
                   ))}
                   {(panelAnomalies.get(selectedPanel.id) || []).length === 0 && (

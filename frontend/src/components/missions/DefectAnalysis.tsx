@@ -230,13 +230,13 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
         <p className="text-xs text-muted-foreground">No image-level CV results were returned.</p>
       )}
       {!rawLoading && rawByImage?.map((item) => (
-        <div key={item.imageId} className="rounded-lg border p-3 space-y-2">
-          <div className="flex items-center justify-between gap-2">
+        <div key={item.imageId} className="space-y-2 rounded-lg border p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-medium truncate">Image: {item.storagePath}</p>
-              <p className="text-[11px] text-muted-foreground font-mono">{item.imageId}</p>
+              <p className="break-all font-mono text-[11px] text-muted-foreground">{item.imageId}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline" className="text-xs">
                 {item.detections.length} detection(s)
               </Badge>
@@ -254,7 +254,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
           </div>
 
           {item.imageUrl && (
-            <img src={item.imageUrl} alt={item.storagePath} className="h-24 w-40 object-cover rounded border" />
+            <img src={item.imageUrl} alt={item.storagePath} className="h-24 w-full max-w-40 rounded border object-cover" />
           )}
 
           {item.error && (
@@ -273,11 +273,11 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
                 const bbox = d.bbox || {};
                 return (
                   <div key={d.inspection_id} className="text-xs rounded border bg-muted/40 p-2">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <span className="font-medium">
                         class: {d.class_name}
                       </span>
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-center gap-1">
                         {d.status === 'FAIL' && (
                           <Button
                             type="button"
@@ -436,12 +436,12 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             AI Defect Analysis
           </CardTitle>
-          <Badge className={cn(conditionStyles[overallCondition])}>{overallCondition}</Badge>
+          <Badge className={cn('w-fit', conditionStyles[overallCondition])}>{overallCondition}</Badge>
         </div>
       </CardHeader>
 
@@ -465,7 +465,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {Object.entries(defectsByType).map(([type, defects]) => {
             const Icon = defectIcons[type as keyof typeof defectIcons] || AlertTriangle;
             const avgConfidence = defects.reduce((s, d) => s + d.confidence, 0) / defects.length;
@@ -485,13 +485,13 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
 
         <div className="space-y-2">
           <h4 className="text-sm font-medium">Detected Defects</h4>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
+          <div className="touch-scroll max-h-64 space-y-2 overflow-y-auto">
             {results.map((result) => {
               const Icon = defectIcons[result.fault_type as keyof typeof defectIcons] || AlertTriangle;
               const bbox = result.bbox || {};
 
               return (
-                <div key={result.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card text-sm">
+                <div key={result.id} className="flex flex-col gap-3 rounded-lg border bg-card p-3 text-sm sm:flex-row sm:items-start">
                   <Icon
                     className={cn(
                       'h-5 w-5 mt-0.5',
@@ -500,9 +500,9 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
                     aria-label={result.fault_type}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <span className="font-medium capitalize">{result.fault_type.toLowerCase().replace('_', ' ')}</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           type="button"
                           variant="ghost"

@@ -46,16 +46,16 @@ export default function Profile() {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Avatar Section */}
-            <div className="flex items-center gap-6">
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
               <Avatar className="h-20 w-20">
                 <AvatarImage src={user.avatar} alt={user.name} />
                 <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
                   {user.name.charAt(0)}
                 </AvatarFallback>
               </Avatar>
-              <div>
-                <h3 className="text-xl font-semibold">{user.name}</h3>
-                <p className="text-muted-foreground capitalize">{user.role.replace('_', ' ')}</p>
+              <div className="min-w-0">
+                <h3 className="break-words text-xl font-semibold">{user.name}</h3>
+                <p className="break-words text-muted-foreground capitalize">{user.role.replace('_', ' ')}</p>
               </div>
             </div>
 
@@ -109,16 +109,16 @@ export default function Profile() {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               {isEditing ? (
                 <>
-                  <Button onClick={handleSave}>Save Changes</Button>
-                  <Button variant="outline" onClick={() => setIsEditing(false)}>
+                  <Button onClick={handleSave} className="w-full sm:w-auto">Save Changes</Button>
+                  <Button variant="outline" onClick={() => setIsEditing(false)} className="w-full sm:w-auto">
                     Cancel
                   </Button>
                 </>
               ) : (
-                <Button variant="outline" onClick={() => setIsEditing(true)}>
+                <Button variant="outline" onClick={() => setIsEditing(true)} className="w-full sm:w-auto">
                   Edit Profile
                 </Button>
               )}
@@ -138,14 +138,14 @@ export default function Profile() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="font-medium">Password</p>
                 <p className="text-sm text-muted-foreground">
                   Last changed: Never
                 </p>
               </div>
-              <Button variant="outline" onClick={handleResetPassword}>
+              <Button variant="outline" onClick={handleResetPassword} className="w-full sm:w-auto">
                 Reset Password
               </Button>
             </div>

@@ -8,6 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
+    color-scheme: light;
     --background: 120 15% 97%;
     --foreground: 152 60% 12%;
 
@@ -64,6 +65,7 @@ All colors MUST be HSL.
   }
 
   .dark {
+    color-scheme: dark;
     --background: 152 50% 6%;
     --foreground: 120 20% 96%;
 
@@ -121,9 +123,67 @@ All colors MUST be HSL.
 @layer base {
   * {
     @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    min-height: 100%;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  #root {
+    min-height: 100%;
   }
 
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
+    min-height: 100svh;
+    min-width: 320px;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+
+  img,
+  video {
+    height: auto;
+  }
+
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  .app-screen {
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
   }
 }

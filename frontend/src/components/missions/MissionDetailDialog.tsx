@@ -28,7 +28,7 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Inspection Details</DialogTitle>
           <DialogDescription>
@@ -38,7 +38,7 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
 
         <div className="space-y-6">
           {/* Mission Info */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid gap-4 text-sm sm:grid-cols-2">
             <div>
               <span className="text-muted-foreground">Status:</span>
               <Badge className={cn('ml-2', statusStyles[mission.status] || statusStyles.OPEN)}>
@@ -47,7 +47,7 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
             </div>
             <div>
               <span className="text-muted-foreground">Site:</span>
-              <span className="ml-2 font-medium">{mission.site_name}</span>
+              <span className="ml-2 break-words font-medium">{mission.site_name}</span>
             </div>
             <div>
               <span className="text-muted-foreground">Created:</span>
@@ -57,12 +57,12 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
 
           {/* Tabs for Images and AI Analysis */}
           <Tabs defaultValue="images" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="images" className="flex items-center gap-2">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1">
+              <TabsTrigger value="images" className="flex items-center gap-2 whitespace-normal px-2 py-2 text-xs sm:text-sm">
                 <ImageIcon className="h-4 w-4" />
                 Images ({images?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="analysis" className="flex items-center gap-2">
+              <TabsTrigger value="analysis" className="flex items-center gap-2 whitespace-normal px-2 py-2 text-xs sm:text-sm">
                 <ScanEye className="h-4 w-4" />
                 AI Analysis
               </TabsTrigger>
@@ -70,23 +70,23 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
             
             <TabsContent value="images" className="mt-4">
               {imagesLoading ? (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Skeleton className="h-40 w-full" />
                   <Skeleton className="h-40 w-full" />
                 </div>
               ) : images && images.length > 0 ? (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   {images.map((img) => (
                     <div key={img.id} className="relative">
                       <img
                         src={img.url}
                         alt="Inspection capture"
                         className="rounded-lg object-cover h-40 w-full cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => window.open(img.url, '_blank')}
+                        onClick={() => window.open(img.url, '_blank', 'noopener,noreferrer')}
                       />
                       {canDeleteImages && mission.status === 'OPEN' && (
                         <button
-                          className="absolute top-2 right-2 bg-white/80 rounded p-1 text-danger hover:opacity-90 disabled:opacity-60"
+                          className="absolute right-2 top-2 rounded bg-white/90 px-2 py-1 text-xs text-destructive shadow-sm transition hover:opacity-90 disabled:opacity-60"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!confirm('Delete this image?')) return;
@@ -118,7 +118,7 @@ export function MissionDetailDialog({ mission, open, canDeleteImages, onOpenChan
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Close
           </Button>
         </DialogFooter>

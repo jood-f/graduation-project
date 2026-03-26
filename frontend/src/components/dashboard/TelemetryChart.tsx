@@ -59,10 +59,10 @@ export function TelemetryChart() {
           <CardTitle>{chartTitle}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            {error ? 'Error loading telemetry data' : 'No telemetry data available'}
-          </div>
-        </CardContent>
+        <div className="flex h-[260px] items-center justify-center text-center text-muted-foreground sm:h-[300px]">
+          {error ? 'Error loading telemetry data' : 'No telemetry data available'}
+        </div>
+      </CardContent>
       </Card>
     );
   }
@@ -81,9 +81,12 @@ export function TelemetryChart() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
+        <div className="h-[260px] sm:h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData}>
+            <AreaChart
+              data={chartData}
+              margin={{ top: 8, right: 8, left: -18, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="powerGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
@@ -95,11 +98,13 @@ export function TelemetryChart() {
                 dataKey="time" 
                 className="text-xs fill-muted-foreground"
                 tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                minTickGap={28}
+                tickMargin={8}
               />
               <YAxis 
                 className="text-xs fill-muted-foreground"
                 tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                label={{ value: 'Power (W)', angle: -90, position: 'insideLeft', fill: 'hsl(var(--muted-foreground))' }}
+                width={40}
               />
               <Tooltip
                 contentStyle={{

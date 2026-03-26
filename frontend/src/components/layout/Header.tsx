@@ -24,8 +24,8 @@ export function Header({ title, onMenuClick }: HeaderProps) {
   const unreadNotificationsCount = 0;
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background px-4 sm:px-6">
-      <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:px-6">
+      <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -35,10 +35,10 @@ export function Header({ title, onMenuClick }: HeaderProps) {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 className="text-lg font-semibold sm:text-xl">{title}</h1>
+        <h1 className="truncate text-lg font-semibold sm:text-xl">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         {/* Notifications */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -67,7 +67,7 @@ export function Header({ title, onMenuClick }: HeaderProps) {
         {/* Theme Switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" aria-label="Change theme">
               {theme === 'light' && <Sun className="h-5 w-5" />}
               {theme === 'dark' && <Moon className="h-5 w-5" />}
               {theme === 'system' && <Monitor className="h-5 w-5" />}
@@ -90,7 +90,7 @@ export function Header({ title, onMenuClick }: HeaderProps) {
         </DropdownMenu>
 
         {/* Logout */}
-        <Button variant="ghost" size="icon" onClick={logout}>
+        <Button variant="ghost" size="icon" onClick={logout} aria-label="Log out">
           <LogOut className="h-5 w-5" />
         </Button>
       </div>

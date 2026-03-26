@@ -71,17 +71,17 @@ export default function Missions() {
     <MainLayout title="Inspections">
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <CardTitle>All Inspections ({filteredMissions.length})</CardTitle>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid w-full gap-2 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap">
               {canManage && (
-                <Button onClick={() => setCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <Button onClick={() => setCreateDialogOpen(true)} className="w-full sm:col-span-2 xl:w-auto">
+                  <Plus className="mr-2 h-4 w-4" />
                   New Inspection
                 </Button>
               )}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -91,7 +91,7 @@ export default function Missions() {
                 </SelectContent>
               </Select>
               <Select value={siteFilter} onValueChange={setSiteFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="All Sites" />
                 </SelectTrigger>
                 <SelectContent>
@@ -114,79 +114,133 @@ export default function Missions() {
               ))}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Inspection ID</TableHead>
-                  <TableHead>Panel</TableHead>
-                  <TableHead>Site</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="space-y-4 md:hidden">
                 {filteredMissions.map(mission => {
                   const StatusIcon = statusIcons[mission.status as MissionStatus] || Clock;
                   return (
-                    <TableRow key={mission.id}>
-                      <TableCell className="font-mono text-sm">
-                        {mission.id.slice(0, 12)}...
-                      </TableCell>
-                      <TableCell className="font-medium">{mission.panel_label}</TableCell>
-                      <TableCell>{mission.site_name}</TableCell>
-                      <TableCell>
+                    <div key={mission.id} className="space-y-4 rounded-lg border p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <p className="font-medium">{mission.panel_label}</p>
+                          <p className="break-all font-mono text-xs text-muted-foreground">{mission.id}</p>
+                          <p className="text-sm text-muted-foreground">{mission.site_name}</p>
+                        </div>
                         <Badge className={cn('gap-1', statusStyles[mission.status as MissionStatus] || '')}>
                           <StatusIcon className="h-3 w-3" />
                           {mission.status === 'OPEN' ? 'Open' : mission.status === 'COMPLETED' ? 'Completed' : mission.status.replace('_', ' ')}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(mission.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {/* Upload images - only for OPEN inspections */}
-                          {mission.status === 'OPEN' && canManage && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Upload Images"
-                              onClick={() => setUploadMission(mission)}
-                            >
-                              <Upload className="h-4 w-4" />
-                            </Button>
-                          )}
-
-                          {/* Complete inspection */}
-                          {mission.status === 'OPEN' && canManage && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Complete Inspection"
-                              onClick={() => handleCompleteMission(mission)}
-                              disabled={updateStatusMutation.isPending}
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                            </Button>
-                          )}
-
-                          {/* View button - everyone */}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Created {new Date(mission.created_at).toLocaleDateString()}
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {mission.status === 'OPEN' && canManage && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            title="View Details"
-                            onClick={() => setSelectedMission(mission)}
+                            onClick={() => setUploadMission(mission)}
                           >
-                            <Eye className="h-4 w-4" />
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload
                           </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                        )}
+                        {mission.status === 'OPEN' && canManage && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCompleteMission(mission)}
+                            disabled={updateStatusMutation.isPending}
+                          >
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Complete
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedMission(mission)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
+                        </Button>
+                      </div>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </div>
+
+              <div className="hidden md:block">
+                <Table className="min-w-[52rem]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Inspection ID</TableHead>
+                      <TableHead>Panel</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMissions.map(mission => {
+                      const StatusIcon = statusIcons[mission.status as MissionStatus] || Clock;
+                      return (
+                        <TableRow key={mission.id}>
+                          <TableCell className="font-mono text-sm">
+                            {mission.id.slice(0, 12)}...
+                          </TableCell>
+                          <TableCell className="font-medium">{mission.panel_label}</TableCell>
+                          <TableCell>{mission.site_name}</TableCell>
+                          <TableCell>
+                            <Badge className={cn('gap-1', statusStyles[mission.status as MissionStatus] || '')}>
+                              <StatusIcon className="h-3 w-3" />
+                              {mission.status === 'OPEN' ? 'Open' : mission.status === 'COMPLETED' ? 'Completed' : mission.status.replace('_', ' ')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(mission.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              {mission.status === 'OPEN' && canManage && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Upload Images"
+                                  onClick={() => setUploadMission(mission)}
+                                >
+                                  <Upload className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {mission.status === 'OPEN' && canManage && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Complete Inspection"
+                                  onClick={() => handleCompleteMission(mission)}
+                                  disabled={updateStatusMutation.isPending}
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="View Details"
+                                onClick={() => setSelectedMission(mission)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
           {!isLoading && filteredMissions.length === 0 && (
             <p className="py-8 text-center text-muted-foreground">
