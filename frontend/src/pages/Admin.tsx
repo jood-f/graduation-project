@@ -29,6 +29,11 @@ interface AdminUsersResponse {
   };
 }
 
+interface UpdateUserRoleResponse {
+  user_id: string;
+  role: UserRole;
+}
+
 const roleColors: Record<UserRole, string> = {
   admin: 'bg-destructive text-destructive-foreground',
   operator: 'bg-primary text-primary-foreground',
@@ -90,18 +95,60 @@ export default function Admin() {
 
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(text || 'Failed to update role');
+        let message = 'Failed to update role';
+        try {
+          const body = text ? JSON.parse(text) : null;
+          message = body?.detail || body?.message || message;
+        } catch {
+          if (text) {
+            message = text;
+          }
+        }
+        throw new Error(message);
       }
 
-      return response.json();
+      return response.json() as Promise<UpdateUserRoleResponse>;
     },
-    onSuccess: () => {
+    onSuccess: (updatedUser) => {
+      queryClient.setQueryData<AdminUsersResponse>(['admin-users'], (previousData) => {
+        if (!previousData) {
+          return previousData;
+        }
+
+        const currentRole = previousData.users.find(
+          (user) => user.user_id === updatedUser.user_id
+        )?.role;
+
+        if (!currentRole || currentRole === updatedUser.role) {
+          return previousData;
+        }
+
+        const users = previousData.users.map((user) =>
+          user.user_id === updatedUser.user_id
+            ? { ...user, role: updatedUser.role }
+            : user
+        );
+
+        const counts = {
+          ...previousData.counts,
+          admins:
+            previousData.counts.admins +
+            (updatedUser.role === 'admin' ? 1 : 0) -
+            (currentRole === 'admin' ? 1 : 0),
+          operators:
+            previousData.counts.operators +
+            (updatedUser.role === 'operator' ? 1 : 0) -
+            (currentRole === 'operator' ? 1 : 0),
+        };
+
+        return { ...previousData, users, counts };
+      });
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       toast.success('User role updated successfully');
     },
     onError: (error) => {
       console.error('Error updating role:', error);
-      toast.error('Failed to update user role');
+      toast.error(error instanceof Error ? error.message : 'Failed to update user role');
     },
   });
 
@@ -202,7 +249,12 @@ export default function Admin() {
                         <p className="text-sm text-muted-foreground">Change role</p>
                         <Select
                           value={user.role}
-                          onValueChange={(value) => handleRoleChange(user.user_id, value as UserRole)}
+                          onValueChange={(value) => {
+                            const nextRole = value as UserRole;
+                            if (nextRole !== user.role) {
+                              handleRoleChange(user.user_id, nextRole);
+                            }
+                          }}
                           disabled={updateRoleMutation.isPending}
                         >
                           <SelectTrigger className="w-full">
@@ -255,7 +307,12 @@ export default function Admin() {
                           <TableCell className="text-right">
                             <Select
                               value={user.role}
-                              onValueChange={(value) => handleRoleChange(user.user_id, value as UserRole)}
+                              onValueChange={(value) => {
+                                const nextRole = value as UserRole;
+                                if (nextRole !== user.role) {
+                                  handleRoleChange(user.user_id, nextRole);
+                                }
+                              }}
                               disabled={updateRoleMutation.isPending}
                             >
                               <SelectTrigger className="ml-auto w-36">

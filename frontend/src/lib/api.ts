@@ -1,7 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
 const API_PATH_PREFIX = '/api/v1';
-const LOCAL_API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
 const DEPLOYED_API_BASE_URL = 'https://solarsense-backend.prouddune-0da5686d.centralindia.azurecontainerapps.io/api/v1';
 const DEFAULT_API_TIMEOUT_MS = 30000;
 const DISABLED_TIMEOUT_VALUES = new Set([
@@ -36,6 +35,15 @@ function isLoopbackUrl(url: string): boolean {
   }
 }
 
+function isCurrentOriginUrl(url: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URL(url).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 function uniqueUrls(urls: Array<string | undefined | null>): string[] {
   return [...new Set(urls.map((url) => url?.trim()).filter((url): url is string => !!url))];
 }
@@ -64,7 +72,7 @@ function getConfiguredBaseUrls(): string[] {
   ]);
 
   if (typeof window === 'undefined' || isLoopbackHost(window.location.hostname)) {
-    return configured;
+    return configured.filter((url) => !isCurrentOriginUrl(url));
   }
 
   const remoteSafeConfigured = configured.filter((url) => !isLoopbackUrl(url));
@@ -75,7 +83,7 @@ function getBaseUrlCandidates(): string[] {
   const configured = getConfiguredBaseUrls();
 
   if (typeof window === 'undefined') {
-    return uniqueUrls([...configured, LOCAL_API_BASE_URL, DEPLOYED_API_BASE_URL]);
+    return uniqueUrls([...configured, DEPLOYED_API_BASE_URL]);
   }
 
   const sameOriginBaseUrl = withApiPrefix(window.location.origin);
@@ -86,14 +94,11 @@ function getBaseUrlCandidates(): string[] {
       ...configured,
       DEPLOYED_API_BASE_URL,
       sameOriginBaseUrl,
-      LOCAL_API_BASE_URL,
     ]);
   }
 
   return uniqueUrls([
     ...configured,
-    LOCAL_API_BASE_URL,
-    sameOriginBaseUrl,
     DEPLOYED_API_BASE_URL,
   ]);
 }

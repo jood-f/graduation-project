@@ -21,4 +21,20 @@ CV/DET_ROOT/
 CV/OUT_SPLIT/
 CV/Solar_panel_Images/
 CV/train/
+CV/YOLO_RESULTS/*
+!CV/YOLO_RESULTS/run_20260210_194054/
+CV/YOLO_RESULTS/run_20260210_194054/*
+!CV/YOLO_RESULTS/run_20260210_194054/runs/
+CV/YOLO_RESULTS/run_20260210_194054/runs/*
+!CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/
+CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/*
+!CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/weights/
+CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/weights/*
+!CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/weights/best.pt
+
+# Ignore ML training artifacts that are not needed by the backend image.
+ml/*
+!ml/telemetry_power_model.h5
+!ml/telemetry_scaler_X.joblib
+!ml/telemetry_scaler_y.joblib
 

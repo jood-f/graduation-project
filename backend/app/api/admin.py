@@ -18,6 +18,22 @@ class UserRoleUpdate(BaseModel):
     role: UserRole
 
 
+def _set_user_role(db: Session, user_id: uuid.UUID, role: UserRole) -> None:
+    params = {"user_id": str(user_id), "role": role}
+    db.execute(
+        text(
+            """
+            update auth.users
+            set
+              raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('role', cast(:role as text)),
+              raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', cast(:role as text))
+            where id = cast(:user_id as uuid)
+            """
+        ),
+        params,
+    )
+
+
 def _parse_requester_id(requester_id: str | None) -> uuid.UUID:
     if not requester_id:
         raise HTTPException(status_code=401, detail="Missing X-User-Id header")
@@ -54,7 +70,12 @@ def list_users(
               u.id as user_id,
               coalesce(p.name, split_part(u.email, '@', 1), 'User') as name,
               u.email,
-              coalesce(ur.role::text, 'operator') as role,
+              coalesce(
+                u.raw_app_meta_data ->> 'role',
+                u.raw_user_meta_data ->> 'role',
+                ur.role::text,
+                'operator'
+              ) as role,
               p.created_at
             from auth.users u
             left join public.profiles p on p.user_id = u.id
@@ -106,16 +127,7 @@ def update_user_role(
     if target_exists is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.execute(
-        text(
-            """
-            insert into public.user_roles (user_id, role)
-            values (:user_id, :role)
-            on conflict (user_id) do update set role = excluded.role
-            """
-        ),
-        {"user_id": str(user_id), "role": payload.role},
-    )
+    _set_user_role(db, user_id, payload.role)
 
     # Backward compatibility: keep profiles.role in sync when that column exists.
     try:
