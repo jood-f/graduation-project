@@ -25,7 +25,7 @@ class Telemetry(Base):
     voltage: Mapped[float] = mapped_column(Float, nullable=False)
     current: Mapped[float] = mapped_column(Float, nullable=False)
     temperature: Mapped[float] = mapped_column(Float, nullable=False)
-    light: Mapped[float] = mapped_column(Float, nullable=False)
+    light: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

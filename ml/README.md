@@ -23,6 +23,36 @@ Ensure your backend database is running and contains:
 - At least one panel in the `panels` table
 - Telemetry data in the `telemetry` table
 
+## ML Tests
+
+The ML pipeline tests live in the repo-level `tests/` folder and cover:
+- telemetry preprocessing and required-feature validation
+- sequence creation and window-size edge cases
+- scaler and model artifact loading failures
+- lightweight inference against deterministic telemetry samples
+- optional end-to-end inference using the saved `ml/telemetry_power_model.h5` artifact
+
+### Run the fast ML unit suite
+
+```bash
+pip install -r backend/requirements.txt pytest
+pytest -q -m "not ml_integration"
+```
+
+### Run the full ML suite, including saved-artifact inference
+
+```bash
+pytest -q
+```
+
+### Run a specific ML test file
+
+```bash
+pytest -q tests/test_preprocessing.py
+pytest -q tests/test_ml_pipeline.py
+pytest -q tests/test_inference.py
+```
+
 ## Usage
 
 ### Option A: Generate Sample Data (for testing without hardware)

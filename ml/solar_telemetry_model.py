@@ -32,34 +32,88 @@ def load_telemetry_from_db(panel_id=None):
     """Load telemetry data from PostgreSQL database."""
     from app.db.database import SessionLocal
     from app.models.telemetry import Telemetry
+    from app.services.supabase_telemetry_service import (
+        SupabaseTelemetryError,
+        supabase_telemetry_service,
+    )
     
-    db = SessionLocal()
+    db = SessionLocal() if SessionLocal is not None else None
     try:
-        query = db.query(Telemetry).order_by(Telemetry.timestamp)
-        if panel_id:
-            query = query.filter(Telemetry.panel_id == panel_id)
-        
-        results = query.all()
-        
-        if not results:
+        try:
+            if db is None:
+                raise RuntimeError("Direct database session is unavailable")
+            query = db.query(Telemetry).order_by(Telemetry.timestamp)
+            if panel_id:
+                query = query.filter(Telemetry.panel_id == panel_id)
+
+            results = query.all()
+
+            data = []
+            for record in results:
+                data.append({
+                    'timestamp': record.timestamp,
+                    'voltage': record.voltage,
+                    'current': record.current,
+                    'temperature': record.temperature,
+                    'power': record.voltage * record.current  # Calculate power
+                })
+
+            if data:
+                df = pd.DataFrame(data)
+                print(f"Loaded {len(df)} telemetry records from database")
+                return df
+        except Exception as exc:
+            if db is not None:
+                db.rollback()
+            print(f"Direct database read failed, trying Supabase REST fallback: {exc}")
+
+        try:
+            rows = supabase_telemetry_service.list_telemetry(
+                panel_id=panel_id,
+                ascending=True,
+            )
+        except SupabaseTelemetryError as exc:
+            raise ValueError(
+                "No telemetry data could be loaded from either direct database access "
+                f"or Supabase REST fallback: {exc}"
+            ) from exc
+
+        if not rows:
             raise ValueError("No telemetry data found in database. Please add data first.")
-        
+
         data = []
-        for record in results:
+        for record in rows:
+            voltage = record.get("voltage")
+            current = record.get("current")
+            temperature = record.get("temperature")
+            timestamp = record.get("timestamp")
+
+            if (
+                timestamp is None
+                or voltage is None
+                or current is None
+                or temperature is None
+            ):
+                continue
+
             data.append({
-                'timestamp': record.timestamp,
-                'voltage': record.voltage,
-                'current': record.current,
-                'temperature': record.temperature,
-                'power': record.voltage * record.current  # Calculate power
+                'timestamp': pd.to_datetime(timestamp),
+                'voltage': float(voltage),
+                'current': float(current),
+                'temperature': float(temperature),
+                'power': float(voltage) * float(current),
             })
-        
+
+        if not data:
+            raise ValueError("No usable telemetry rows were returned from Supabase.")
+
         df = pd.DataFrame(data)
-        print(f"Loaded {len(df)} telemetry records from database")
+        print(f"Loaded {len(df)} telemetry records from Supabase REST fallback")
         return df
     
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
 
 def create_sequences(df, feature_cols, target_col, window_size=20):

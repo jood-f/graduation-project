@@ -9,6 +9,12 @@ import { usePanels, type Panel } from '@/hooks/usePanels';
 import { useSites } from '@/hooks/useSites';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  type Severity,
+  formatAnomalyConfidence,
+  getAnomalySeverity,
+  normalizeAnomalyConfidence,
+} from '@/lib/anomalySeverity';
 import { Activity, AlertTriangle, MapPin, Zap, Filter } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -27,7 +33,7 @@ type PanelAnomaly = {
   id: string;
   source: 'ML' | 'CV';
   type: string;
-  severity: 'LOW' | 'MED' | 'HIGH';
+  severity: Severity;
   message: string;
   detected_at: string;
 };
@@ -80,15 +86,17 @@ export function PanelHeatmap() {
     const map = new Map<string, PanelAnomaly[]>();
 
     (faults || []).forEach((fault) => {
-      const severity: 'LOW' | 'MED' | 'HIGH' =
-        fault.confidence >= 0.85 ? 'HIGH' : fault.confidence >= 0.7 ? 'MED' : 'LOW';
+      const confidence = normalizeAnomalyConfidence('ML', fault.fault_type, fault.confidence);
+      const severity = getAnomalySeverity('ML', fault.fault_type, confidence);
 
       const item: PanelAnomaly = {
         id: `ml-${fault.id}`,
         source: 'ML',
         type: fault.fault_type,
         severity,
-        message: `ML detected ${fault.fault_type} (${Math.round(fault.confidence * 100)}% confidence)`,
+        message: `ML detected ${fault.fault_type} (${
+          confidence != null ? `${formatAnomalyConfidence(confidence)} confidence` : 'No confidence'
+        })`,
         detected_at: fault.detected_at,
       };
 
@@ -98,15 +106,17 @@ export function PanelHeatmap() {
     });
 
     (cvAnomalies || []).forEach((anomaly) => {
-      const severity: 'LOW' | 'MED' | 'HIGH' =
-        anomaly.confidence >= 0.85 ? 'HIGH' : anomaly.confidence >= 0.7 ? 'MED' : 'LOW';
+      const confidence = normalizeAnomalyConfidence('CV', anomaly.defect_type, anomaly.confidence);
+      const severity = getAnomalySeverity('CV', anomaly.defect_type, confidence);
 
       const item: PanelAnomaly = {
         id: `cv-${anomaly.id}`,
         source: 'CV',
         type: anomaly.defect_type,
         severity,
-        message: `CV detected ${anomaly.defect_type} (${Math.round(anomaly.confidence * 100)}% confidence)`,
+        message: `CV detected ${anomaly.defect_type} (${
+          confidence != null ? `${formatAnomalyConfidence(confidence)} confidence` : 'No confidence'
+        })`,
         detected_at: anomaly.inspected_at,
       };
 
