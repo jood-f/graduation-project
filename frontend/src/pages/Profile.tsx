@@ -7,22 +7,60 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { User, Mail, Shield, Calendar, Key } from 'lucide-react';
+import { User, Mail, Shield, Calendar, Key, Loader2 } from 'lucide-react';
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
   const [name, setName] = useState(user?.name || '');
   const [isEditing, setIsEditing] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
-  const handleSave = () => {
-    updateProfile({ name });
-    setIsEditing(false);
-    toast.success('Profile updated successfully');
+  const handleSave = async () => {
+    try {
+      await updateProfile({ name });
+      setIsEditing(false);
+      toast.success('Profile updated successfully');
+    } catch (error) {
+      toast.error('Failed to update profile');
+    }
   };
 
-  const handleResetPassword = () => {
-    toast.info('Password reset email sent! (Demo mode)');
+  const handleResetPassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsChangingPassword(false);
+      toast.success('Password updated successfully');
+    } catch (error) {
+      toast.error('Failed to update password');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
 
   if (!user) {
@@ -138,16 +176,61 @@ export default function Profile() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="font-medium">Password</p>
-                <p className="text-sm text-muted-foreground">
-                  Last changed: Never
-                </p>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium">Password</p>
+                  <p className="text-sm text-muted-foreground">
+                    Change your account password without leaving the app
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsChangingPassword((current) => !current);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                  }}
+                  className="w-full sm:w-auto"
+                >
+                  {isChangingPassword ? 'Cancel' : 'Change Password'}
+                </Button>
               </div>
-              <Button variant="outline" onClick={handleResetPassword} className="w-full sm:w-auto">
-                Reset Password
-              </Button>
+
+              {isChangingPassword ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">New Password</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      placeholder="Enter a new password"
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-new-password">Confirm Password</Label>
+                    <Input
+                      id="confirm-new-password"
+                      type="password"
+                      placeholder="Repeat the new password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <Button onClick={handleResetPassword} disabled={isUpdatingPassword} className="w-full sm:w-auto">
+                      {isUpdatingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Update Password
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </CardContent>
         </Card>
