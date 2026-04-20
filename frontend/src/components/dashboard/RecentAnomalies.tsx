@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
-import { AlertTriangle, Thermometer, Zap, HelpCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, ArrowRight, Thermometer, Zap, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import {
@@ -105,7 +107,15 @@ export function RecentAnomalies() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Recent Anomalies</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>Recent Anomalies</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/anomalies">
+                All Anomalies
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Skeleton className="h-20" />
@@ -118,7 +128,15 @@ export function RecentAnomalies() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Anomalies</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>Recent Anomalies</CardTitle>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/anomalies">
+              All Anomalies
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {recentItems.length === 0 ? (

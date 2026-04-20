@@ -261,6 +261,12 @@ def test_analyze_pending_panel_telemetry_only_processes_unanalyzed_rows(
         "_auto_create_inspection",
         lambda db, panel_id: True,
     )
+    synced_panel_ids: list[uuid.UUID] = []
+    monkeypatch.setattr(
+        telemetry_api,
+        "sync_panel_status",
+        lambda db, *, panel_id: synced_panel_ids.append(panel_id),
+    )
 
     result = telemetry_api._analyze_pending_panel_telemetry(
         SimpleNamespace(),
@@ -276,6 +282,7 @@ def test_analyze_pending_panel_telemetry_only_processes_unanalyzed_rows(
     assert len(persisted_predictions[0]) == 1
     assert persisted_predictions[0][0]["timestamp"] == rows[-1].timestamp.isoformat()
     assert created_fault_timestamps == [{rows[-1].timestamp.isoformat()}]
+    assert synced_panel_ids == [panel_id]
 
 
 def test_analyze_panel_telemetry_only_creates_faults_for_new_anomalies(
@@ -335,6 +342,12 @@ def test_analyze_panel_telemetry_only_creates_faults_for_new_anomalies(
         "_auto_create_inspection",
         lambda db, panel_id: True,
     )
+    synced_panel_ids: list[uuid.UUID] = []
+    monkeypatch.setattr(
+        telemetry_api,
+        "sync_panel_status",
+        lambda db, *, panel_id: synced_panel_ids.append(panel_id),
+    )
 
     result = telemetry_api._analyze_panel_telemetry(
         SimpleNamespace(),
@@ -350,6 +363,7 @@ def test_analyze_panel_telemetry_only_creates_faults_for_new_anomalies(
     assert result["faults_created"] == 2
     assert result["inspection_created"] is True
     assert captured_fault_timestamps == [new_timestamps]
+    assert synced_panel_ids == [panel_id]
 
 
 def test_ml_anomaly_confidence_tracks_error_strength():

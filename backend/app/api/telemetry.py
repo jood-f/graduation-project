@@ -19,6 +19,7 @@ from app.services.supabase_telemetry_service import (
     SupabaseTelemetryError,
     supabase_telemetry_service,
 )
+from app.services.panel_status_service import sync_panel_status
 from app.security import AuthUser, get_current_user, require_roles
 
 logger = __import__("logging").getLogger(__name__)
@@ -584,6 +585,7 @@ def _analyze_pending_panel_telemetry(
     inspection_created = False
     if new_anomaly_timestamps:
         inspection_created = _auto_create_inspection(db, panel_id)
+    sync_panel_status(db, panel_id=panel_id)
 
     return {
         **base,
@@ -775,6 +777,8 @@ def _analyze_panel_telemetry(
 
             if new_anomaly_timestamps:
                 inspection_created = _auto_create_inspection(db, panel_id)
+
+            sync_panel_status(db, panel_id=panel_id)
         except SQLAlchemyError as exc:
             db.rollback()
             logger.warning(

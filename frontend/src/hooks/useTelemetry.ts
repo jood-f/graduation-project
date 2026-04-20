@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { apiGet } from '@/lib/api';
 
@@ -17,6 +17,8 @@ export interface LatestTelemetryResult {
   isFallback: boolean;
   anchorTimestamp: string | null;
 }
+
+export type TelemetryPeriod = 'day' | 'week' | 'month';
 
 export interface TelemetryPrediction {
   timestamp: string;
@@ -59,6 +61,24 @@ export interface AnomalyResult {
   threshold: number;
   anomalies: Anomaly[];
   total_anomalies: number;
+}
+
+const TELEMETRY_PERIOD_CONFIG: Record<TelemetryPeriod, { hours: number; fallbackLimit: number }> = {
+  day: { hours: 24, fallbackLimit: 288 },
+  week: { hours: 24 * 7, fallbackLimit: 1008 },
+  month: { hours: 24 * 30, fallbackLimit: 4320 },
+};
+
+function buildTelemetryQuery(columns: string, panelId?: string) {
+  let query = (supabase as any)
+    .from('telemetry')
+    .select(columns);
+
+  if (panelId) {
+    query = query.eq('panel_id', panelId);
+  }
+
+  return query;
 }
 
 /**
@@ -138,14 +158,16 @@ export function useNextPrediction(panelId: string) {
 }
 
 /**
- * Get latest telemetry for all panels (for dashboard charts)
+ * Get telemetry history for a selected panel and period.
  */
-export function useLatestTelemetry(hours: number = 12) {
+export function useLatestTelemetry(panelId?: string, period: TelemetryPeriod = 'day') {
+  const { hours, fallbackLimit } = TELEMETRY_PERIOD_CONFIG[period];
+
   return useQuery({
-    queryKey: ['latest-telemetry', hours],
+    queryKey: ['latest-telemetry', panelId, period],
+    enabled: !!panelId,
     queryFn: async (): Promise<LatestTelemetryResult> => {
       const MIN_POINTS_FOR_CHART = 2;
-      const EXTENDED_FALLBACK_LIMIT = 240;
       const withPower = (rows: Telemetry[]) =>
         rows.map((t) => ({
           ...t,
@@ -154,9 +176,10 @@ export function useLatestTelemetry(hours: number = 12) {
 
       const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
-      const { data, error } = await (supabase as any)
-        .from('telemetry')
-        .select('*')
+      const { data, error } = await buildTelemetryQuery(
+        'id,panel_id,voltage,current,temperature,timestamp',
+        panelId
+      )
         .gte('timestamp', since)
         .order('timestamp', { ascending: true });
 
@@ -173,9 +196,10 @@ export function useLatestTelemetry(hours: number = 12) {
       }
 
       // No records in the last `hours`: fall back to a window ending at the latest available record.
-      const { data: latestRow, error: latestError } = await (supabase as any)
-        .from('telemetry')
-        .select('timestamp')
+      const { data: latestRow, error: latestError } = await buildTelemetryQuery(
+        'timestamp',
+        panelId
+      )
         .order('timestamp', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -194,9 +218,10 @@ export function useLatestTelemetry(hours: number = 12) {
         new Date(latestTimestamp).getTime() - hours * 60 * 60 * 1000
       ).toISOString();
 
-      const { data: fallbackData, error: fallbackError } = await (supabase as any)
-        .from('telemetry')
-        .select('*')
+      const { data: fallbackData, error: fallbackError } = await buildTelemetryQuery(
+        'id,panel_id,voltage,current,temperature,timestamp',
+        panelId
+      )
         .gte('timestamp', fallbackSince)
         .lte('timestamp', latestTimestamp)
         .order('timestamp', { ascending: true });
@@ -213,11 +238,12 @@ export function useLatestTelemetry(hours: number = 12) {
       }
 
       // If data is very sparse, show the latest available history so the chart remains informative.
-      const { data: extendedFallbackData, error: extendedFallbackError } = await (supabase as any)
-        .from('telemetry')
-        .select('*')
+      const { data: extendedFallbackData, error: extendedFallbackError } = await buildTelemetryQuery(
+        'id,panel_id,voltage,current,temperature,timestamp',
+        panelId
+      )
         .order('timestamp', { ascending: false })
-        .limit(EXTENDED_FALLBACK_LIMIT);
+        .limit(fallbackLimit);
 
       if (extendedFallbackError) throw extendedFallbackError;
 

@@ -10,9 +10,22 @@ from app.models.mission_images import MissionImage
 from app.models.panel import Panel
 from app.models.site import Site
 from app.schemas.inspection_result import InspectionResultCreate, InspectionResultOut, InspectionResultUpdate
+from app.services.panel_status_service import sync_panel_status
 from app.security import AuthUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1/inspection-results", tags=["Inspection Results"])
+
+
+def _resolve_panel_id_for_result(db: Session, row: InspectionResult) -> uuid.UUID | None:
+    if row.panel_id is not None:
+        return row.panel_id
+
+    mission_panel_id = (
+        db.query(Mission.panel_id)
+        .filter(Mission.id == row.mission_id)
+        .scalar()
+    )
+    return mission_panel_id
 
 
 @router.post("", response_model=InspectionResultOut)
@@ -35,6 +48,11 @@ def create_inspection_result(
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    panel_id = _resolve_panel_id_for_result(db, row)
+    if panel_id is not None:
+        sync_panel_status(db, panel_id=panel_id)
+
     return row
 
 
@@ -174,4 +192,9 @@ def update_inspection_result(
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    panel_id = _resolve_panel_id_for_result(db, row)
+    if panel_id is not None:
+        sync_panel_status(db, panel_id=panel_id)
+
     return row
