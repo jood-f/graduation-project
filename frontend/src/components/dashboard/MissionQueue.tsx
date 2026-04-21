@@ -1,6 +1,8 @@
-import { Camera, Clock, CheckCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Camera, Clock, CheckCircle, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMissions, type Mission } from '@/hooks/useMissions';
 import { cn } from '@/lib/utils';
@@ -52,7 +54,15 @@ export function MissionQueue() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Open Inspections</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>Open Inspections</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/missions">
+                All Inspections
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Skeleton className="h-16" />
@@ -65,7 +75,15 @@ export function MissionQueue() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Open Inspections</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>Open Inspections</CardTitle>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/missions">
+              All Inspections
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {activeMissions.length === 0 ? (

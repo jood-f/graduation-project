@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface Panel {
@@ -15,7 +16,31 @@ export interface PanelWithSite extends Panel {
   sites: { name: string } | null;
 }
 
+function usePanelsRealtimeInvalidation() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = (supabase as any)
+      .channel('realtime:panels:status-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'panels' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ['panels'] });
+          void queryClient.invalidateQueries({ queryKey: ['panel-stats'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+}
+
 export function usePanels() {
+  usePanelsRealtimeInvalidation();
+
   return useQuery({
     queryKey: ['panels'],
     queryFn: async () => {

@@ -21,10 +21,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { useSites } from '@/hooks/useSites';
+import {
+  type ModelType,
+  type Severity,
+  formatAnomalyConfidence,
+  getAnomalySeverity,
+  normalizeAnomalyConfidence,
+} from '@/lib/anomalySeverity';
 import { cn } from '@/lib/utils';
-
-type Severity = 'LOW' | 'MED' | 'HIGH';
-type ModelType = 'ML' | 'CV';
 
 const severityStyles = {
   LOW: 'bg-info/10 text-info border-info/20',
@@ -48,15 +52,10 @@ interface CombinedAnomaly {
   confidence: number | null;
 }
 
-function getSeverity(confidence: number): Severity {
-  if (confidence >= 0.85) return 'HIGH';
-  if (confidence >= 0.7) return 'MED';
-  return 'LOW';
-}
-
 export default function Anomalies() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [panelFilter, setPanelFilter] = useState<string>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
 
   const { data: faults, isLoading: mlLoading } = useFaults();
@@ -64,42 +63,85 @@ export default function Anomalies() {
   const { data: sites } = useSites();
 
   const allAnomalies = useMemo<CombinedAnomaly[]>(() => {
-    const mlRows: CombinedAnomaly[] = (faults || []).map((fault) => ({
-      id: `ml-${fault.id}`,
-      panel_label: fault.panel_label || 'Unknown',
-      site_name: fault.site_name || 'Unknown Site',
-      anomaly_type: fault.fault_type,
-      severity: getSeverity(fault.confidence),
-      model: 'ML',
-      detected_at: fault.detected_at,
-      confidence: fault.confidence,
-    }));
+    const mlRows: CombinedAnomaly[] = (faults || []).map((fault) => {
+      const model: ModelType = 'ML';
+      const confidence = normalizeAnomalyConfidence(model, fault.fault_type, fault.confidence);
 
-    const cvRows: CombinedAnomaly[] = (cvAnomalies || []).map((item) => ({
-      id: `cv-${item.id}`,
-      panel_label: item.panel_label || 'Unknown',
-      site_name: item.site_name || 'Unknown Site',
-      anomaly_type: item.defect_type,
-      severity: getSeverity(item.confidence),
-      model: 'CV',
-      detected_at: item.inspected_at,
-      confidence: item.confidence,
-    }));
+      return {
+        id: `ml-${fault.id}`,
+        panel_label: fault.panel_label || 'Unknown',
+        site_name: fault.site_name || 'Unknown Site',
+        anomaly_type: fault.fault_type,
+        severity: getAnomalySeverity(model, fault.fault_type, confidence),
+        model,
+        detected_at: fault.detected_at,
+        confidence,
+      };
+    });
+
+    const cvRows: CombinedAnomaly[] = (cvAnomalies || []).map((item) => {
+      const model: ModelType = 'CV';
+      const confidence = normalizeAnomalyConfidence(model, item.defect_type, item.confidence);
+
+      return {
+        id: `cv-${item.id}`,
+        panel_label: item.panel_label || 'Unknown',
+        site_name: item.site_name || 'Unknown Site',
+        anomaly_type: item.defect_type,
+        severity: getAnomalySeverity(model, item.defect_type, confidence),
+        model,
+        detected_at: item.inspected_at,
+        confidence,
+      };
+    });
 
     return [...mlRows, ...cvRows].sort(
       (a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime()
     );
   }, [faults, cvAnomalies]);
 
+  const selectedSiteName = useMemo(
+    () => sites?.find((site) => site.id === siteFilter)?.name,
+    [siteFilter, sites]
+  );
+
+  const availablePanels = useMemo(() => {
+    const seen = new Map<string, { key: string; label: string; siteName: string }>();
+
+    allAnomalies.forEach((item) => {
+      if (selectedSiteName && item.site_name !== selectedSiteName) {
+        return;
+      }
+
+      const key = `${item.site_name}::${item.panel_label}`;
+      if (!seen.has(key)) {
+        seen.set(key, {
+          key,
+          label: item.panel_label,
+          siteName: item.site_name,
+        });
+      }
+    });
+
+    return Array.from(seen.values()).sort((a, b) => {
+      const labelCompare = a.label.localeCompare(b.label);
+      if (labelCompare !== 0) {
+        return labelCompare;
+      }
+      return a.siteName.localeCompare(b.siteName);
+    });
+  }, [allAnomalies, selectedSiteName]);
+
   const filteredAnomalies = useMemo(() => {
     return allAnomalies.filter((item) => {
       const matchesSeverity = severityFilter === 'all' || item.severity === severityFilter;
-      const matchesSite =
-        siteFilter === 'all' || item.site_name === sites?.find((s) => s.id === siteFilter)?.name;
+      const matchesSite = siteFilter === 'all' || item.site_name === selectedSiteName;
+      const matchesPanel =
+        panelFilter === 'all' || `${item.site_name}::${item.panel_label}` === panelFilter;
       const matchesModel = modelFilter === 'all' || item.model === modelFilter;
-      return matchesSeverity && matchesSite && matchesModel;
+      return matchesSeverity && matchesSite && matchesPanel && matchesModel;
     });
-  }, [allAnomalies, severityFilter, siteFilter, modelFilter, sites]);
+  }, [allAnomalies, severityFilter, siteFilter, selectedSiteName, panelFilter, modelFilter]);
 
   const isLoading = mlLoading || cvLoading;
 
@@ -131,8 +173,14 @@ export default function Anomalies() {
                   <SelectItem value="HIGH">High</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={siteFilter} onValueChange={setSiteFilter}>
-                <SelectTrigger className="w-full sm:col-span-2 xl:w-[200px]">
+              <Select
+                value={siteFilter}
+                onValueChange={(value) => {
+                  setSiteFilter(value);
+                  setPanelFilter('all');
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="All Sites" />
                 </SelectTrigger>
                 <SelectContent>
@@ -140,6 +188,20 @@ export default function Anomalies() {
                   {sites?.map((site) => (
                     <SelectItem key={site.id} value={site.id}>
                       {site.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={panelFilter} onValueChange={setPanelFilter}>
+                <SelectTrigger className="w-full sm:col-span-2 xl:w-[220px]">
+                  <SelectValue placeholder="All Panels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Panels</SelectItem>
+                  {availablePanels.map((panel) => (
+                    <SelectItem key={panel.key} value={panel.key}>
+                      {panel.label}
+                      {siteFilter === 'all' ? ` (${panel.siteName})` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -173,7 +235,9 @@ export default function Anomalies() {
                         <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
                         <Badge className={cn(severityStyles[severity])}>{severity}</Badge>
                         <Badge variant="outline">
-                          {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}% confidence` : 'No confidence'}
+                          {item.confidence != null
+                            ? `${formatAnomalyConfidence(item.confidence)} confidence`
+                            : 'No confidence'}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">{new Date(item.detected_at).toLocaleString()}</p>
@@ -212,7 +276,7 @@ export default function Anomalies() {
                             <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
                           </TableCell>
                           <TableCell>
-                            {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}%` : '-'}
+                            {formatAnomalyConfidence(item.confidence)}
                           </TableCell>
                           <TableCell>
                             <Badge className={cn(severityStyles[severity])}>{severity}</Badge>

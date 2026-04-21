@@ -1,6 +1,35 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { apiFetch } from '@/lib/api';
+
+const LIVE_ANOMALY_REFETCH_MS = 5000;
+
+function useRealtimeTableInvalidation(queryKey: readonly string[], table: string) {
+  const queryClient = useQueryClient();
+  const queryKeySignature = queryKey.join(':');
+  const stableQueryKey = useMemo(
+    () => (queryKeySignature ? queryKeySignature.split(':') : []),
+    [queryKeySignature]
+  );
+
+  useEffect(() => {
+    const channel = (supabase as any)
+      .channel(`realtime:${table}:${queryKeySignature}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: stableQueryKey });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient, queryKeySignature, stableQueryKey, table]);
+}
 
 async function readApiError(response: Response): Promise<string> {
   const contentType = response.headers.get('content-type')?.toLowerCase() || '';
@@ -47,6 +76,8 @@ interface FaultRow {
 }
 
 export function useFaults() {
+  useRealtimeTableInvalidation(['faults'], 'faults');
+
   return useQuery({
     queryKey: ['faults'],
     queryFn: async (): Promise<Fault[]> => {
@@ -77,6 +108,9 @@ export function useFaults() {
         site_name: row.panels?.sites?.name || 'Unknown Site',
       }));
     },
+    refetchInterval: LIVE_ANOMALY_REFETCH_MS,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -179,6 +213,8 @@ interface InspectionResultRow {
 }
 
 export function useCVAnomalies() {
+  useRealtimeTableInvalidation(['cv-anomalies'], 'inspection_results');
+
   return useQuery({
     queryKey: ['cv-anomalies'],
     queryFn: async (): Promise<CVAnomaly[]> => {
@@ -214,5 +250,8 @@ export function useCVAnomalies() {
           model_version: row.model_version,
         }));
     },
+    refetchInterval: LIVE_ANOMALY_REFETCH_MS,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 }

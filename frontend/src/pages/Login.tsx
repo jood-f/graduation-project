@@ -53,7 +53,7 @@ export default function Login() {
       }
 
       toast.success('Welcome back!');
-      navigate('/');
+      navigate('/overview');
     } catch (error) {
       toast.error('An unexpected error occurred');
     } finally {

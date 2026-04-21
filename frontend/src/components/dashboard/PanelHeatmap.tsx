@@ -9,6 +9,18 @@ import { usePanels, type Panel } from '@/hooks/usePanels';
 import { useSites } from '@/hooks/useSites';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { supabase } from '@/integrations/supabase/client';
+import type { PanelStatus } from '@/types';
+import {
+  type Severity,
+  formatAnomalyConfidence,
+  getAnomalySeverity,
+  normalizeAnomalyConfidence,
+} from '@/lib/anomalySeverity';
+import {
+  PanelStatusExplanationDialog,
+  PanelStatusLegend,
+  panelStatusBadgeVariants,
+} from '@/components/panels/PanelStatusInfo';
 import { Activity, AlertTriangle, MapPin, Zap, Filter } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -17,17 +29,11 @@ const statusColors: Record<string, string> = {
   FAULT: 'bg-destructive hover:bg-destructive/80',
 };
 
-const statusBadgeVariants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  OK: 'default',
-  WARNING: 'secondary',
-  FAULT: 'destructive',
-};
-
 type PanelAnomaly = {
   id: string;
   source: 'ML' | 'CV';
   type: string;
-  severity: 'LOW' | 'MED' | 'HIGH';
+  severity: Severity;
   message: string;
   detected_at: string;
 };
@@ -48,6 +54,7 @@ function getDisplaySiteName(panel: Pick<Panel, 'site_id' | 'site_name'> | null |
 
 export function PanelHeatmap() {
   const [selectedPanel, setSelectedPanel] = useState<Panel | null>(null);
+  const [selectedStatusInfo, setSelectedStatusInfo] = useState<PanelStatus | null>(null);
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -80,15 +87,17 @@ export function PanelHeatmap() {
     const map = new Map<string, PanelAnomaly[]>();
 
     (faults || []).forEach((fault) => {
-      const severity: 'LOW' | 'MED' | 'HIGH' =
-        fault.confidence >= 0.85 ? 'HIGH' : fault.confidence >= 0.7 ? 'MED' : 'LOW';
+      const confidence = normalizeAnomalyConfidence('ML', fault.fault_type, fault.confidence);
+      const severity = getAnomalySeverity('ML', fault.fault_type, confidence);
 
       const item: PanelAnomaly = {
         id: `ml-${fault.id}`,
         source: 'ML',
         type: fault.fault_type,
         severity,
-        message: `ML detected ${fault.fault_type} (${Math.round(fault.confidence * 100)}% confidence)`,
+        message: `ML detected ${fault.fault_type} (${
+          confidence != null ? `${formatAnomalyConfidence(confidence)} confidence` : 'No confidence'
+        })`,
         detected_at: fault.detected_at,
       };
 
@@ -98,15 +107,17 @@ export function PanelHeatmap() {
     });
 
     (cvAnomalies || []).forEach((anomaly) => {
-      const severity: 'LOW' | 'MED' | 'HIGH' =
-        anomaly.confidence >= 0.85 ? 'HIGH' : anomaly.confidence >= 0.7 ? 'MED' : 'LOW';
+      const confidence = normalizeAnomalyConfidence('CV', anomaly.defect_type, anomaly.confidence);
+      const severity = getAnomalySeverity('CV', anomaly.defect_type, confidence);
 
       const item: PanelAnomaly = {
         id: `cv-${anomaly.id}`,
         source: 'CV',
         type: anomaly.defect_type,
         severity,
-        message: `CV detected ${anomaly.defect_type} (${Math.round(anomaly.confidence * 100)}% confidence)`,
+        message: `CV detected ${anomaly.defect_type} (${
+          confidence != null ? `${formatAnomalyConfidence(confidence)} confidence` : 'No confidence'
+        })`,
         detected_at: anomaly.inspected_at,
       };
 
@@ -227,21 +238,7 @@ export function PanelHeatmap() {
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
-            <span className="text-muted-foreground">Status:</span>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-primary" />
-              <span>OK</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-warning" />
-              <span>Warning</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded bg-destructive" />
-              <span>Fault</span>
-            </div>
-          </div>
+          <PanelStatusLegend onSelectStatus={setSelectedStatusInfo} />
         </CardContent>
       </Card>
 
@@ -250,7 +247,18 @@ export function PanelHeatmap() {
           <DialogHeader>
             <DialogTitle className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <span className="break-words">{getDisplayPanelName(selectedPanel)}</span>
-              {selectedPanel && <Badge variant={statusBadgeVariants[selectedPanel.status]}>{selectedPanel.status}</Badge>}
+              {selectedPanel && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusInfo(selectedPanel.status)}
+                  className="w-fit"
+                  aria-label={`Explain ${selectedPanel.status.toLowerCase()} status`}
+                >
+                  <Badge variant={panelStatusBadgeVariants[selectedPanel.status]}>
+                    {selectedPanel.status}
+                  </Badge>
+                </button>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -334,6 +342,12 @@ export function PanelHeatmap() {
           )}
         </DialogContent>
       </Dialog>
+
+      <PanelStatusExplanationDialog
+        status={selectedStatusInfo}
+        open={!!selectedStatusInfo}
+        onOpenChange={(open) => !open && setSelectedStatusInfo(null)}
+      />
     </>
   );
 }

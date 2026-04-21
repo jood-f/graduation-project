@@ -16,6 +16,7 @@ from app.models.mission_images import MissionImage
 from app.models.inspection_result import InspectionResult, InspectionStatus
 from app.schemas.mission_images import MissionImageCreate, MissionImageOut, AnalysisResponse, DetectionResult
 from app.services.cv_service import get_cv_service
+from app.services.panel_status_service import sync_panel_status
 from app.security import AuthUser, get_current_user, require_roles
 
 # Configure logger
@@ -251,6 +252,9 @@ def analyze_mission_image(
     for result in inspection_results:
         db.refresh(result)
 
+    if resolved_panel_id is not None:
+        sync_panel_status(db, panel_id=resolved_panel_id)
+
     return AnalysisResponse(
         image_id=img.id,
         storage_path=img.storage_path,
@@ -345,6 +349,9 @@ def reanalyze_mission_image(
     db.commit()
     for result in inspection_results:
         db.refresh(result)
+
+    if resolved_panel_id is not None:
+        sync_panel_status(db, panel_id=resolved_panel_id)
 
     return AnalysisResponse(
         image_id=img.id,

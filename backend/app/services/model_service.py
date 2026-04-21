@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Relative error is not meaningful when actual power is near zero.
 MIN_ACTUAL_POWER_FOR_PERCENT = 1.0
+REQUIRED_FEATURES = ("voltage", "current", "temperature")
+
 
 class TelemetryModelService:
     """Service for loading and using the trained telemetry prediction model"""
@@ -30,6 +32,7 @@ class TelemetryModelService:
         self.scaler_x_path: Optional[str] = None
         self.scaler_y_path: Optional[str] = None
         self.unavailable_reason: Optional[str] = None
+        self.scaler_unavailable_reason: Optional[str] = None
         self.model_search_paths: list[str] = []
         self.scaler_search_paths: list[str] = []
         self._load_model()
@@ -162,8 +165,13 @@ class TelemetryModelService:
                 break
 
         if x_path is None or y_path is None:
+            self.scaler_unavailable_reason = (
+                "Telemetry scaler files not found. "
+                "Set ML_SCALER_DIR or deploy telemetry_scaler_X.joblib and telemetry_scaler_y.joblib."
+            )
             logger.info(
-                "No telemetry scaler files found. Searched: %s",
+                "%s Searched: %s",
+                self.scaler_unavailable_reason,
                 "; ".join(self.scaler_search_paths),
             )
             return
@@ -174,50 +182,127 @@ class TelemetryModelService:
             self.is_fitted = True
             self.scaler_x_path = str(x_path)
             self.scaler_y_path = str(y_path)
+            self.scaler_unavailable_reason = None
             logger.info(f"Loaded telemetry scalers from {x_path} and {y_path}")
         except Exception as e:
-            logger.warning(f"Failed to load telemetry scalers: {e}")
+            self.is_fitted = False
+            self.scaler_unavailable_reason = f"Telemetry scalers load failed: {e}"
+            logger.warning(self.scaler_unavailable_reason)
+
+    def preprocess_telemetry(self, telemetry_data: List[Dict]) -> Optional[np.ndarray]:
+        """Validate telemetry rows and return a numeric feature matrix."""
+        if not telemetry_data:
+            logger.warning("No telemetry data provided for preprocessing.")
+            return None
+
+        features: list[list[float]] = []
+        for idx, row in enumerate(telemetry_data):
+            if not isinstance(row, dict):
+                logger.warning("Telemetry row %s is not a dictionary.", idx)
+                return None
+
+            missing_fields = [field for field in REQUIRED_FEATURES if field not in row]
+            if missing_fields:
+                logger.warning(
+                    "Telemetry row %s is missing required fields: %s",
+                    idx,
+                    ", ".join(missing_fields),
+                )
+                return None
+
+            try:
+                feature_row = [float(row[field]) for field in REQUIRED_FEATURES]
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    "Telemetry row %s contains non-numeric feature values: %s",
+                    idx,
+                    exc,
+                )
+                return None
+
+            if not np.all(np.isfinite(feature_row)):
+                logger.warning(
+                    "Telemetry row %s contains null or non-finite feature values.",
+                    idx,
+                )
+                return None
+
+            features.append(feature_row)
+
+        return np.asarray(features, dtype=float)
+
+    def _build_sequence_array(self, scaled_features: np.ndarray) -> Optional[np.ndarray]:
+        """Build rolling windows for LSTM inference."""
+        if len(scaled_features) <= self.sequence_length:
+            logger.warning(
+                "Insufficient data for sequence creation. Need more than %s records, got %s.",
+                self.sequence_length,
+                len(scaled_features),
+            )
+            return None
+
+        sequences = []
+        for i in range(len(scaled_features) - self.sequence_length):
+            sequences.append(scaled_features[i:i + self.sequence_length])
+
+        return np.asarray(sequences) if sequences else None
+
+    def _postprocess_predictions(self, predictions_scaled) -> Optional[np.ndarray]:
+        """Validate model outputs and convert scaled predictions when needed."""
+        try:
+            preds_arr = np.asarray(predictions_scaled, dtype=float).reshape(-1, 1)
+        except (TypeError, ValueError) as exc:
+            logger.warning("Model predictions could not be converted to floats: %s", exc)
+            return None
+
+        if preds_arr.size == 0:
+            logger.warning("Model returned no predictions.")
+            return None
+
+        if not np.isfinite(preds_arr).all():
+            logger.warning("Model predictions contain NaN or infinite values.")
+            return None
+
+        if hasattr(self.scaler_y, "scale_") and np.max(np.abs(preds_arr)) < 50:
+            predictions = self.scaler_y.inverse_transform(preds_arr)
+        else:
+            predictions = preds_arr
+
+        if not np.isfinite(predictions).all():
+            logger.warning("Post-processed predictions contain NaN or infinite values.")
+            return None
+
+        return predictions
     
     def fit_scalers(self, telemetry_data: List[Dict]):
         """Fit scalers on historical data"""
-        if len(telemetry_data) < 100:
+        features = self.preprocess_telemetry(telemetry_data)
+        if features is None:
+            return False
+
+        if len(features) < 100:
             logger.warning("Insufficient data to fit scalers. Need at least 100 records.")
             return False
-        
-        features = np.array([
-            [d['voltage'], d['current'], d['temperature']] 
-            for d in telemetry_data
-        ])
-        power = np.array([[d['voltage'] * d['current']] for d in telemetry_data])
+
+        power = (features[:, 0] * features[:, 1]).reshape(-1, 1)
         
         self.scaler_X.fit(features)
         self.scaler_y.fit(power)
         self.is_fitted = True
-        logger.info(f"Scalers fitted on {len(telemetry_data)} records")
+        logger.info(f"Scalers fitted on {len(features)} records")
         return True
     
     def create_sequences(self, telemetry_data: List[Dict]) -> Optional[np.ndarray]:
         """Create sequences from telemetry data for LSTM input"""
         if not self.is_fitted:
             raise ValueError("Scalers not fitted. Call fit_scalers first.")
-        
-        if len(telemetry_data) < self.sequence_length:
-            logger.warning(f"Insufficient data for sequence. Need at least {self.sequence_length} records.")
+
+        features = self.preprocess_telemetry(telemetry_data)
+        if features is None:
             return None
-        
-        # Extract features and scale
-        features = np.array([
-            [d['voltage'], d['current'], d['temperature']] 
-            for d in telemetry_data
-        ])
+
         scaled_features = self.scaler_X.transform(features)
-        
-        # Create sequences
-        sequences = []
-        for i in range(len(scaled_features) - self.sequence_length):
-            sequences.append(scaled_features[i:i + self.sequence_length])
-        
-        return np.array(sequences) if sequences else None
+        return self._build_sequence_array(scaled_features)
     
     def predict_power(self, telemetry_data: List[Dict]) -> Optional[List[Dict]]:
         """
@@ -236,27 +321,36 @@ class TelemetryModelService:
         if not self.is_fitted:
             if not self.fit_scalers(telemetry_data):
                 return None
-        
-        sequences = self.create_sequences(telemetry_data)
+
+        features = self.preprocess_telemetry(telemetry_data)
+        if features is None:
+            return None
+
+        try:
+            scaled_features = self.scaler_X.transform(features)
+        except Exception as e:
+            logger.warning("Failed to transform telemetry features for prediction: %s", e)
+            return None
+
+        sequences = self._build_sequence_array(scaled_features)
         if sequences is None:
             return None
-        
-        # Make predictions
-        predictions_scaled = self.model.predict(sequences, verbose=0)
-        # Accept models that either predict scaled targets (z-scores) or raw power.
-        preds_arr = np.asarray(predictions_scaled).reshape(-1, 1)
-        if hasattr(self.scaler_y, 'scale_') and np.nanmax(np.abs(preds_arr)) < 50:
-            # small-magnitude outputs look like scaled values -> inverse transform
-            predictions = self.scaler_y.inverse_transform(preds_arr)
-        else:
-            # large-magnitude outputs look like raw power -> use as-is
-            predictions = preds_arr
+
+        try:
+            predictions_scaled = self.model.predict(sequences, verbose=0)
+        except Exception as e:
+            logger.warning("Model prediction failed: %s", e)
+            return None
+
+        predictions = self._postprocess_predictions(predictions_scaled)
+        if predictions is None:
+            return None
 
         # Calculate actual power and errors
         results = []
         for i, pred in enumerate(predictions):
             idx = i + self.sequence_length
-            actual_power = telemetry_data[idx]['voltage'] * telemetry_data[idx]['current']
+            actual_power = float(features[idx][0] * features[idx][1])
             predicted_power = max(float(pred[0]), 0.0)
             error = abs(actual_power - predicted_power)
             if abs(actual_power) < MIN_ACTUAL_POWER_FOR_PERCENT:
@@ -270,9 +364,9 @@ class TelemetryModelService:
                 'predicted_power': round(predicted_power, 2),
                 'error': round(error, 2),
                 'error_percent': round(error_percent, 2) if error_percent is not None else None,
-                'voltage': telemetry_data[idx]['voltage'],
-                'current': telemetry_data[idx]['current'],
-                'temperature': telemetry_data[idx]['temperature']
+                'voltage': float(features[idx][0]),
+                'current': float(features[idx][1]),
+                'temperature': float(features[idx][2])
             })
         
         return results
@@ -327,29 +421,35 @@ class TelemetryModelService:
         if len(recent_telemetry) < self.sequence_length:
             logger.warning(f"Need at least {self.sequence_length} recent records for prediction")
             return None
-        
+
         if not self.is_fitted:
             if not self.fit_scalers(recent_telemetry):
                 return None
-        
+
         # Take last sequence_length records
         recent = recent_telemetry[-self.sequence_length:]
-        
-        # Extract and scale features
-        features = np.array([
-            [d['voltage'], d['current'], d['temperature']] 
-            for d in recent
-        ])
-        scaled = self.scaler_X.transform(features)
+
+        features = self.preprocess_telemetry(recent)
+        if features is None:
+            return None
+
+        try:
+            scaled = self.scaler_X.transform(features)
+        except Exception as e:
+            logger.warning("Failed to transform telemetry features for next prediction: %s", e)
+            return None
         
         # Create sequence and predict
         sequence = scaled.reshape(1, self.sequence_length, 3)
-        prediction_scaled = self.model.predict(sequence, verbose=0)
-        pred_arr = np.asarray(prediction_scaled).reshape(-1, 1)
-        if hasattr(self.scaler_y, 'scale_') and np.nanmax(np.abs(pred_arr)) < 50:
-            prediction = self.scaler_y.inverse_transform(pred_arr)
-        else:
-            prediction = pred_arr
+        try:
+            prediction_scaled = self.model.predict(sequence, verbose=0)
+        except Exception as e:
+            logger.warning("Model next-step prediction failed: %s", e)
+            return None
+
+        prediction = self._postprocess_predictions(prediction_scaled)
+        if prediction is None:
+            return None
 
         predicted_power = max(float(prediction[0][0]), 0.0)
 
@@ -369,6 +469,8 @@ class TelemetryModelService:
             'scaler_x_path': self.scaler_x_path,
             'scaler_y_path': self.scaler_y_path,
             'reason': self.unavailable_reason,
+            'scaler_reason': self.scaler_unavailable_reason,
+            'required_features': list(REQUIRED_FEATURES),
             'searched_model_paths': self.model_search_paths,
             'searched_scaler_paths': self.scaler_search_paths,
         }

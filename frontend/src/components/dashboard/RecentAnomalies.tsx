@@ -1,9 +1,17 @@
 import { useMemo } from 'react';
-import { AlertTriangle, Thermometer, Zap, HelpCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, ArrowRight, Thermometer, Zap, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
+import {
+  type ModelType,
+  formatAnomalyConfidence,
+  getAnomalySeverity,
+  normalizeAnomalyConfidence,
+} from '@/lib/anomalySeverity';
 import { cn } from '@/lib/utils';
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -13,12 +21,6 @@ const typeIcons: Record<string, React.ElementType> = {
   'Soiling': HelpCircle,
   'Cell Damage': AlertTriangle,
   'default': AlertTriangle,
-};
-
-const getSeverity = (confidence: number): 'LOW' | 'MED' | 'HIGH' => {
-  if (confidence >= 0.8) return 'HIGH';
-  if (confidence >= 0.5) return 'MED';
-  return 'LOW';
 };
 
 const severityStyles: Record<string, string> = {
@@ -32,16 +34,18 @@ interface FaultItemProps {
     id: string;
     panel_label?: string;
     site_name?: string;
+    model: ModelType;
     fault_type: string;
-    confidence: number;
+    confidence: number | null;
     detected_at: string;
   };
 }
 
 function FaultItem({ fault }: FaultItemProps) {
   const Icon = typeIcons[fault.fault_type] || typeIcons['default'];
-  const severity = getSeverity(fault.confidence);
-  
+  const confidence = normalizeAnomalyConfidence(fault.model, fault.fault_type, fault.confidence);
+  const severity = getAnomalySeverity(fault.model, fault.fault_type, confidence);
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:gap-4">
       <div className={cn('w-fit rounded-lg p-2', severityStyles[severity])}>
@@ -55,7 +59,8 @@ function FaultItem({ fault }: FaultItemProps) {
           </Badge>
         </div>
         <p className="mt-1 text-sm text-muted-foreground line-clamp-1">
-          {fault.fault_type} detected ({Math.round(fault.confidence * 100)}% confidence)
+          {fault.fault_type} detected (
+          {confidence != null ? `${formatAnomalyConfidence(confidence)} confidence` : 'No confidence'})
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           {new Date(fault.detected_at).toLocaleString()}
@@ -79,6 +84,7 @@ export function RecentAnomalies() {
       id: `ml-${f.id}`,
       panel_label: f.panel_label,
       site_name: f.site_name,
+      model: 'ML' as const,
       fault_type: f.fault_type,
       confidence: f.confidence,
       detected_at: f.detected_at,
@@ -87,6 +93,7 @@ export function RecentAnomalies() {
       id: `cv-${c.id}`,
       panel_label: c.panel_label,
       site_name: c.site_name,
+      model: 'CV' as const,
       fault_type: c.defect_type,
       confidence: c.confidence,
       detected_at: c.inspected_at,
@@ -100,7 +107,15 @@ export function RecentAnomalies() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Recent Anomalies</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>Recent Anomalies</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/anomalies">
+                All Anomalies
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Skeleton className="h-20" />
@@ -113,7 +128,15 @@ export function RecentAnomalies() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Anomalies</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>Recent Anomalies</CardTitle>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/anomalies">
+              All Anomalies
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {recentItems.length === 0 ? (

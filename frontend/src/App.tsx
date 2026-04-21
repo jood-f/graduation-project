@@ -17,6 +17,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
+import Landing from "./pages/Landing";
 
 const queryClient = new QueryClient();
 
@@ -29,11 +30,12 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
+              <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               {/* All authenticated users can access Overview */}
-              <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+              <Route path="/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
               {/* Panels & Anomalies: Admin and Operator only */}
               <Route path="/panels" element={
                 <RoleBasedRoute allowedRoles={['admin', 'operator']}>
