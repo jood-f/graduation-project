@@ -37,12 +37,12 @@ export default function Landing() {
               Detect panel issues faster and protect your energy output
             </h1>
             <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
-              SolarSense combines thermal inspections, anomaly detection, and mission tracking in one place so your team can act before small faults become expensive failures.
+              SolarSense combines RGB inspections, anomaly detection, and mission tracking in one place so your team can act before small faults become expensive failures.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button asChild size="lg">
                 <Link to="/signup">
-                  Start Free
+                  Start Now
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
@@ -68,7 +68,7 @@ export default function Landing() {
                 Faster inspections
               </div>
               <p className="text-sm text-muted-foreground">
-                Upload thermal captures and let AI highlight anomalies in seconds.
+                Upload RGB captures and let AI highlight anomalies in seconds.
               </p>
             </div>
             <div className="rounded-xl border border-border bg-background p-4">
