@@ -13,7 +13,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import logo from '@/assets/SolarSense_Logo.png';
 
 const navItems = [
-  { path: '/', label: 'Overview', icon: LayoutDashboard, roles: ['admin', 'operator'] },
+  { path: '/overview', label: 'Overview', icon: LayoutDashboard, roles: ['admin', 'operator'] },
   { path: '/panels', label: 'Panels', icon: Zap, roles: ['admin', 'operator'] },
   { path: '/anomalies', label: 'Anomalies', icon: AlertTriangle, roles: ['admin', 'operator'] },
   { path: '/missions', label: 'Inspections', icon: Camera, roles: ['admin', 'operator'] },
@@ -102,3 +102,4 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
     </>
   );
 }
+

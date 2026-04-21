@@ -26,7 +26,7 @@ export function RoleBasedRoute({ children, allowedRoles }: RoleBasedRouteProps) 
 
   if (!hasRole(allowedRoles)) {
     // Redirect unauthorized users to overview
-    return <Navigate to="/" replace />;
+    return <Navigate to="/overview" replace />;
   }
 
   return <>{children}</>;
