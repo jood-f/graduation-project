@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatAnomalyConfidence,
+  getSeverityExplanation,
   getAnomalySeverity,
   normalizeAnomalyConfidence,
 } from '@/lib/anomalySeverity';
@@ -20,5 +21,13 @@ describe('anomalySeverity', () => {
     expect(confidence).toBe(0.76);
     expect(getAnomalySeverity('CV', 'HOTSPOT', confidence)).toBe('MED');
     expect(formatAnomalyConfidence(confidence)).toBe('76%');
+  });
+
+  it('provides user-facing severity help text', () => {
+    expect(getSeverityExplanation('HIGH')).toEqual({
+      title: 'High severity',
+      description: 'The anomaly signal is strong and more likely to affect panel performance.',
+      recommendation: 'Prioritize this panel for inspection as soon as possible.',
+    });
   });
 });

@@ -5,11 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SeverityBadge } from '@/components/anomalies/SeverityBadge';
 import { usePanels, type Panel } from '@/hooks/usePanels';
 import { useSites } from '@/hooks/useSites';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { supabase } from '@/integrations/supabase/client';
-import type { PanelStatus } from '@/types';
 import {
   type Severity,
   formatAnomalyConfidence,
@@ -17,9 +17,8 @@ import {
   normalizeAnomalyConfidence,
 } from '@/lib/anomalySeverity';
 import {
-  PanelStatusExplanationDialog,
+  PanelStatusBadge,
   PanelStatusLegend,
-  panelStatusBadgeVariants,
 } from '@/components/panels/PanelStatusInfo';
 import { Activity, AlertTriangle, MapPin, Zap, Filter } from 'lucide-react';
 
@@ -54,7 +53,6 @@ function getDisplaySiteName(panel: Pick<Panel, 'site_id' | 'site_name'> | null |
 
 export function PanelHeatmap() {
   const [selectedPanel, setSelectedPanel] = useState<Panel | null>(null);
-  const [selectedStatusInfo, setSelectedStatusInfo] = useState<PanelStatus | null>(null);
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -238,7 +236,7 @@ export function PanelHeatmap() {
             </div>
           )}
 
-          <PanelStatusLegend onSelectStatus={setSelectedStatusInfo} />
+          <PanelStatusLegend />
         </CardContent>
       </Card>
 
@@ -248,16 +246,7 @@ export function PanelHeatmap() {
             <DialogTitle className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <span className="break-words">{getDisplayPanelName(selectedPanel)}</span>
               {selectedPanel && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedStatusInfo(selectedPanel.status)}
-                  className="w-fit"
-                  aria-label={`Explain ${selectedPanel.status.toLowerCase()} status`}
-                >
-                  <Badge variant={panelStatusBadgeVariants[selectedPanel.status]}>
-                    {selectedPanel.status}
-                  </Badge>
-                </button>
+                <PanelStatusBadge status={selectedPanel.status} className="w-fit" />
               )}
             </DialogTitle>
           </DialogHeader>
@@ -328,7 +317,10 @@ export function PanelHeatmap() {
                     <div key={anomaly.id} className="rounded-lg border border-warning/20 bg-warning/10 p-2 text-sm">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <span className="font-medium">{anomaly.type}</span>
-                        <Badge variant="outline" className="w-fit text-xs">{anomaly.source} - {anomaly.severity}</Badge>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline" className="w-fit text-xs">{anomaly.source}</Badge>
+                          <SeverityBadge severity={anomaly.severity} />
+                        </div>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">{anomaly.message}</p>
                     </div>
@@ -342,12 +334,6 @@ export function PanelHeatmap() {
           )}
         </DialogContent>
       </Dialog>
-
-      <PanelStatusExplanationDialog
-        status={selectedStatusInfo}
-        open={!!selectedStatusInfo}
-        onOpenChange={(open) => !open && setSelectedStatusInfo(null)}
-      />
     </>
   );
 }

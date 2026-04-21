@@ -36,10 +36,8 @@ import { Search, Filter } from 'lucide-react';
 import { usePanels, type Panel } from '@/hooks/usePanels';
 import { useSites } from '@/hooks/useSites';
 import { supabase } from '@/integrations/supabase/client';
-import type { PanelStatus } from '@/types';
 import {
-  PanelStatusExplanationDialog,
-  panelStatusStyles,
+  PanelStatusBadge,
 } from '@/components/panels/PanelStatusInfo';
 import { cn } from '@/lib/utils';
 
@@ -141,7 +139,6 @@ export default function Panels() {
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedPanel, setSelectedPanel] = useState<Panel | null>(null);
-  const [selectedStatusInfo, setSelectedStatusInfo] = useState<PanelStatus | null>(null);
   const [detailsTab, setDetailsTab] = useState('overview');
   const [recordPage, setRecordPage] = useState(1);
   const requestedPanelId = searchParams.get('panel');
@@ -343,14 +340,7 @@ export default function Panels() {
                         <p className="font-medium">{panel.label || 'N/A'}</p>
                         <p className="break-all text-sm text-muted-foreground">{panel.serial_number || 'N/A'}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedStatusInfo(panel.status)}
-                        className="w-fit"
-                        aria-label={`Explain ${panel.status.toLowerCase()} status`}
-                      >
-                        <Badge className={cn(panelStatusStyles[panel.status])}>{panel.status}</Badge>
-                      </button>
+                      <PanelStatusBadge status={panel.status} className="w-fit" />
                     </div>
                     <div className="text-sm">
                       <p className="text-muted-foreground">Site</p>
@@ -386,14 +376,7 @@ export default function Panels() {
                         <TableCell className="break-all text-muted-foreground">{panel.serial_number || 'N/A'}</TableCell>
                         <TableCell>{panel.site_name}</TableCell>
                         <TableCell>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedStatusInfo(panel.status)}
-                            className="w-fit"
-                            aria-label={`Explain ${panel.status.toLowerCase()} status`}
-                          >
-                            <Badge className={cn(panelStatusStyles[panel.status])}>{panel.status}</Badge>
-                          </button>
+                          <PanelStatusBadge status={panel.status} className="w-fit" />
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -452,16 +435,7 @@ export default function Panels() {
                             <h3 className="text-lg font-semibold">{selectedPanel.label || 'Unnamed Panel'}</h3>
                             <p className="text-sm text-muted-foreground">{selectedPanel.site_name || 'Unknown Site'}</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedStatusInfo(selectedPanel.status)}
-                            className="w-fit"
-                            aria-label={`Explain ${selectedPanel.status.toLowerCase()} status`}
-                          >
-                            <Badge className={cn('w-fit', panelStatusStyles[selectedPanel.status])}>
-                              {selectedPanel.status}
-                            </Badge>
-                          </button>
+                          <PanelStatusBadge status={selectedPanel.status} className="w-fit" />
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -473,16 +447,7 @@ export default function Panels() {
                           <DetailField
                             label="Status"
                             value={
-                              <button
-                                type="button"
-                                onClick={() => setSelectedStatusInfo(selectedPanel.status)}
-                                className="w-fit"
-                                aria-label={`Explain ${selectedPanel.status.toLowerCase()} status`}
-                              >
-                                <Badge className={cn(panelStatusStyles[selectedPanel.status])}>
-                                  {selectedPanel.status}
-                                </Badge>
-                              </button>
+                              <PanelStatusBadge status={selectedPanel.status} className="w-fit" />
                             }
                           />
                           <DetailField label="Panel Label" value={selectedPanel.label || 'Not available'} />
@@ -650,11 +615,6 @@ export default function Panels() {
           </div>
         </DialogContent>
       </Dialog>
-      <PanelStatusExplanationDialog
-        status={selectedStatusInfo}
-        open={!!selectedStatusInfo}
-        onOpenChange={(open) => !open && setSelectedStatusInfo(null)}
-      />
     </MainLayout>
   );
 }

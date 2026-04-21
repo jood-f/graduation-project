@@ -377,6 +377,39 @@ def test_ml_anomaly_confidence_tracks_error_strength():
     assert telemetry_api._ml_anomaly_confidence(10.0, 0.0) == 0.5
 
 
+def test_should_create_ml_fault_skips_same_type_inside_cooldown(monkeypatch):
+    panel_id = uuid.uuid4()
+    detected_at = datetime(2026, 4, 19, 1, 47, 39, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(telemetry_api, "AUTO_TELEMETRY_FAULT_COOLDOWN_MINUTES", 15)
+
+    class FakeQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return SimpleNamespace(id=uuid.uuid4())
+
+    class FakeDb:
+        def query(self, *_args, **_kwargs):
+            return FakeQuery()
+
+        def rollback(self):
+            raise AssertionError("rollback should not run for a successful de-dup query")
+
+    should_create = telemetry_api._should_create_ml_fault(
+        FakeDb(),
+        panel_id=panel_id,
+        fault_type="ML_POWER_ANOMALY_HIGH",
+        detected_at=detected_at,
+    )
+
+    assert should_create is False
+
+
 def test_create_fault_rows_uses_strength_based_confidence_for_ml_faults(monkeypatch):
     panel_id = uuid.uuid4()
     timestamp = "2026-04-19T01:47:39+00:00"
@@ -421,6 +454,56 @@ def test_create_fault_rows_uses_strength_based_confidence_for_ml_faults(monkeypa
     assert len(db.rows) == 1
     assert db.rows[0].fault_type == "ML_POWER_ANOMALY_HIGH"
     assert db.rows[0].confidence >= 0.85
+    assert db.rows[0].detected_at == datetime.fromisoformat(timestamp)
+
+
+def test_create_fault_rows_skips_ml_faults_within_cooldown_window(monkeypatch):
+    panel_id = uuid.uuid4()
+    timestamp = "2026-04-19T01:47:39+00:00"
+
+    class FakeFault:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    monkeypatch.setattr(telemetry_api, "Fault", FakeFault)
+    monkeypatch.setattr(
+        telemetry_api,
+        "_should_create_ml_fault",
+        lambda db, *, panel_id, fault_type, detected_at: False,
+    )
+
+    class FakeDb:
+        def __init__(self):
+            self.rows = []
+            self.commits = 0
+
+        def add(self, obj):
+            self.rows.append(obj)
+
+        def commit(self):
+            self.commits += 1
+
+    db = FakeDb()
+
+    created = telemetry_api._create_fault_rows(
+        db,
+        panel_id=panel_id,
+        predictions=[
+            {
+                "timestamp": timestamp,
+                "error": 12.0,
+                "error_percent": None,
+            }
+        ],
+        anomaly_by_timestamp={timestamp: "high"},
+        fault_timestamps={timestamp},
+        threshold=5.0,
+    )
+
+    assert created == 0
+    assert db.commits == 0
+    assert db.rows == []
 
 
 def test_predict_power_uses_supabase_rest_records_when_db_query_is_unavailable(

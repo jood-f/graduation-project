@@ -85,6 +85,10 @@ AUTO_TELEMETRY_ANALYSIS_LOOKBACK_ROWS = _env_int(
     "AUTO_TELEMETRY_ANALYSIS_LOOKBACK_ROWS",
     128,
 )
+AUTO_TELEMETRY_FAULT_COOLDOWN_MINUTES = _env_int(
+    "AUTO_TELEMETRY_FAULT_COOLDOWN_MINUTES",
+    15,
+)
 
 
 # Lazily import the telemetry model service to avoid requiring heavy ML
@@ -389,6 +393,44 @@ def _ml_anomaly_confidence(error: float, threshold: float) -> float:
     return round(min(0.99, 0.85 + (min(ratio - 2, 2) * 0.07)), 4)
 
 
+def _should_create_ml_fault(
+    db: Session,
+    *,
+    panel_id: uuid.UUID,
+    fault_type: str,
+    detected_at: datetime,
+) -> bool:
+    cooldown_minutes = max(0, AUTO_TELEMETRY_FAULT_COOLDOWN_MINUTES)
+    if cooldown_minutes == 0 or not hasattr(db, "query"):
+        return True
+
+    window_start = detected_at - timedelta(minutes=cooldown_minutes)
+    window_end = detected_at + timedelta(minutes=cooldown_minutes)
+
+    try:
+        existing = (
+            db.query(Fault.id)
+            .filter(Fault.panel_id == panel_id)
+            .filter(Fault.fault_type == fault_type)
+            .filter(Fault.detected_at >= window_start)
+            .filter(Fault.detected_at <= window_end)
+            .order_by(Fault.detected_at.desc())
+            .first()
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.warning(
+            "ML fault de-dup query failed for panel %s type %s at %s: %s",
+            panel_id,
+            fault_type,
+            detected_at.isoformat(),
+            exc,
+        )
+        return True
+
+    return existing is None
+
+
 def _create_fault_rows(
     db: Session,
     *,
@@ -411,10 +453,28 @@ def _create_fault_rows(
         if severity is None:
             continue
 
+        detected_at = _parse_iso_timestamp(timestamp)
+        fault_type = f"ML_POWER_ANOMALY_{severity.upper()}"
+        if not _should_create_ml_fault(
+            db,
+            panel_id=panel_id,
+            fault_type=fault_type,
+            detected_at=detected_at,
+        ):
+            logger.info(
+                "Skipping repeated ML fault for panel %s type %s within %s-minute cooldown at %s",
+                panel_id,
+                fault_type,
+                AUTO_TELEMETRY_FAULT_COOLDOWN_MINUTES,
+                detected_at.isoformat(),
+            )
+            continue
+
         fault = Fault(
             panel_id=panel_id,
-            fault_type=f"ML_POWER_ANOMALY_{severity.upper()}",
+            fault_type=fault_type,
             confidence=_ml_anomaly_confidence(float(pred.get("error", 0.0)), threshold),
+            detected_at=detected_at,
         )
         db.add(fault)
         faults_created += 1

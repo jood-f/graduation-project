@@ -1,17 +1,13 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Thermometer, Zap, HelpCircle } from 'lucide-react';
+import { SeverityBadge } from '@/components/anomalies/SeverityBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
-import {
-  type ModelType,
-  formatAnomalyConfidence,
-  getAnomalySeverity,
-  normalizeAnomalyConfidence,
-} from '@/lib/anomalySeverity';
+import { buildAnomalyFeed, type DisplayAnomalyRow } from '@/lib/anomalyFeed';
 import { cn } from '@/lib/utils';
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -30,21 +26,12 @@ const severityStyles: Record<string, string> = {
 };
 
 interface FaultItemProps {
-  fault: {
-    id: string;
-    panel_label?: string;
-    site_name?: string;
-    model: ModelType;
-    fault_type: string;
-    confidence: number | null;
-    detected_at: string;
-  };
+  fault: DisplayAnomalyRow;
 }
 
 function FaultItem({ fault }: FaultItemProps) {
-  const Icon = typeIcons[fault.fault_type] || typeIcons['default'];
-  const confidence = normalizeAnomalyConfidence(fault.model, fault.fault_type, fault.confidence);
-  const severity = getAnomalySeverity(fault.model, fault.fault_type, confidence);
+  const Icon = typeIcons[fault.anomaly_type] || typeIcons['default'];
+  const severity = fault.severity;
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:gap-4">
@@ -57,18 +44,21 @@ function FaultItem({ fault }: FaultItemProps) {
           <Badge variant="outline" className="text-xs">
             {fault.site_name || 'Unknown Site'}
           </Badge>
+          {fault.occurrence_count > 1 && (
+            <Badge variant="outline" className="text-xs">
+              x{fault.occurrence_count}
+            </Badge>
+          )}
         </div>
         <p className="mt-1 text-sm text-muted-foreground line-clamp-1">
-          {fault.fault_type} detected (
-          {confidence != null ? `${formatAnomalyConfidence(confidence)} confidence` : 'No confidence'})
+          {fault.anomaly_type} detected (
+          {fault.confidence != null ? `${fault.confidence_label} confidence` : 'No confidence'})
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {new Date(fault.detected_at).toLocaleString()}
+          {fault.detected_label}
         </p>
       </div>
-      <Badge className={cn('w-fit shrink-0', severityStyles[severity])}>
-        {severity}
-      </Badge>
+      <SeverityBadge severity={severity} className="w-fit shrink-0" />
     </div>
   );
 }
@@ -80,27 +70,7 @@ export function RecentAnomalies() {
   const isLoading = mlLoading || cvLoading;
 
   const recentItems = useMemo(() => {
-    const mlItems = (faults || []).map((f) => ({
-      id: `ml-${f.id}`,
-      panel_label: f.panel_label,
-      site_name: f.site_name,
-      model: 'ML' as const,
-      fault_type: f.fault_type,
-      confidence: f.confidence,
-      detected_at: f.detected_at,
-    }));
-    const cvItems = (cvAnomalies || []).map((c) => ({
-      id: `cv-${c.id}`,
-      panel_label: c.panel_label,
-      site_name: c.site_name,
-      model: 'CV' as const,
-      fault_type: c.defect_type,
-      confidence: c.confidence,
-      detected_at: c.inspected_at,
-    }));
-    return [...mlItems, ...cvItems]
-      .sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime())
-      .slice(0, 3);
+    return buildAnomalyFeed(faults, cvAnomalies).slice(0, 3);
   }, [faults, cvAnomalies]);
 
   if (isLoading) {

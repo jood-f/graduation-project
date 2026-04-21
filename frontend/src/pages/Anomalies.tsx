@@ -19,38 +19,19 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
+import { SeverityBadge } from '@/components/anomalies/SeverityBadge';
 import { useFaults, useCVAnomalies } from '@/hooks/useFaults';
 import { useSites } from '@/hooks/useSites';
 import {
-  type ModelType,
   type Severity,
-  formatAnomalyConfidence,
-  getAnomalySeverity,
-  normalizeAnomalyConfidence,
 } from '@/lib/anomalySeverity';
+import { buildAnomalyFeed } from '@/lib/anomalyFeed';
 import { cn } from '@/lib/utils';
-
-const severityStyles = {
-  LOW: 'bg-info/10 text-info border-info/20',
-  MED: 'bg-warning/10 text-warning border-warning/20',
-  HIGH: 'bg-destructive/10 text-destructive border-destructive/20',
-};
 
 const modelStyles = {
   ML: 'bg-primary/10 text-primary border-primary/20',
   CV: 'bg-secondary text-secondary-foreground border-border',
 };
-
-interface CombinedAnomaly {
-  id: string;
-  panel_label: string;
-  site_name: string;
-  anomaly_type: string;
-  severity: Severity;
-  model: ModelType;
-  detected_at: string;
-  confidence: number | null;
-}
 
 export default function Anomalies() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -62,43 +43,10 @@ export default function Anomalies() {
   const { data: cvAnomalies, isLoading: cvLoading } = useCVAnomalies();
   const { data: sites } = useSites();
 
-  const allAnomalies = useMemo<CombinedAnomaly[]>(() => {
-    const mlRows: CombinedAnomaly[] = (faults || []).map((fault) => {
-      const model: ModelType = 'ML';
-      const confidence = normalizeAnomalyConfidence(model, fault.fault_type, fault.confidence);
-
-      return {
-        id: `ml-${fault.id}`,
-        panel_label: fault.panel_label || 'Unknown',
-        site_name: fault.site_name || 'Unknown Site',
-        anomaly_type: fault.fault_type,
-        severity: getAnomalySeverity(model, fault.fault_type, confidence),
-        model,
-        detected_at: fault.detected_at,
-        confidence,
-      };
-    });
-
-    const cvRows: CombinedAnomaly[] = (cvAnomalies || []).map((item) => {
-      const model: ModelType = 'CV';
-      const confidence = normalizeAnomalyConfidence(model, item.defect_type, item.confidence);
-
-      return {
-        id: `cv-${item.id}`,
-        panel_label: item.panel_label || 'Unknown',
-        site_name: item.site_name || 'Unknown Site',
-        anomaly_type: item.defect_type,
-        severity: getAnomalySeverity(model, item.defect_type, confidence),
-        model,
-        detected_at: item.inspected_at,
-        confidence,
-      };
-    });
-
-    return [...mlRows, ...cvRows].sort(
-      (a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime()
-    );
-  }, [faults, cvAnomalies]);
+  const allAnomalies = useMemo(
+    () => buildAnomalyFeed(faults, cvAnomalies),
+    [faults, cvAnomalies]
+  );
 
   const selectedSiteName = useMemo(
     () => sites?.find((site) => site.id === siteFilter)?.name,
@@ -113,10 +61,9 @@ export default function Anomalies() {
         return;
       }
 
-      const key = `${item.site_name}::${item.panel_label}`;
-      if (!seen.has(key)) {
-        seen.set(key, {
-          key,
+      if (!seen.has(item.panel_key)) {
+        seen.set(item.panel_key, {
+          key: item.panel_key,
           label: item.panel_label,
           siteName: item.site_name,
         });
@@ -132,16 +79,25 @@ export default function Anomalies() {
     });
   }, [allAnomalies, selectedSiteName]);
 
-  const filteredAnomalies = useMemo(() => {
-    return allAnomalies.filter((item) => {
+  const filteredResult = useMemo(() => {
+    const items = allAnomalies.filter((item) => {
       const matchesSeverity = severityFilter === 'all' || item.severity === severityFilter;
       const matchesSite = siteFilter === 'all' || item.site_name === selectedSiteName;
-      const matchesPanel =
-        panelFilter === 'all' || `${item.site_name}::${item.panel_label}` === panelFilter;
+      const matchesPanel = panelFilter === 'all' || item.panel_key === panelFilter;
       const matchesModel = modelFilter === 'all' || item.model === modelFilter;
       return matchesSeverity && matchesSite && matchesPanel && matchesModel;
     });
+
+    const rawCount = items.reduce((total, item) => total + item.occurrence_count, 0);
+
+    return {
+      items,
+      rawCount,
+      duplicateCount: rawCount - items.length,
+    };
   }, [allAnomalies, severityFilter, siteFilter, selectedSiteName, panelFilter, modelFilter]);
+
+  const filteredAnomalies = filteredResult.items;
 
   const isLoading = mlLoading || cvLoading;
 
@@ -208,6 +164,18 @@ export default function Anomalies() {
               </Select>
             </div>
           </div>
+          {!isLoading && (
+            <div className="space-y-1 text-sm text-muted-foreground">
+              {filteredResult.duplicateCount > 0 && (
+                <p>
+                  Showing unique anomaly rows. {filteredResult.duplicateCount} duplicate
+                  {filteredResult.duplicateCount === 1 ? '' : 's'} merged from {filteredResult.rawCount} raw
+                  results.
+                </p>
+              )}
+              <p>Tap any severity badge to see what it means.</p>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -233,14 +201,12 @@ export default function Anomalies() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
-                        <Badge className={cn(severityStyles[severity])}>{severity}</Badge>
+                        <SeverityBadge severity={severity} />
                         <Badge variant="outline">
-                          {item.confidence != null
-                            ? `${formatAnomalyConfidence(item.confidence)} confidence`
-                            : 'No confidence'}
+                          {item.confidence != null ? `${item.confidence_label} confidence` : 'No confidence'}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">{new Date(item.detected_at).toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{item.detected_label}</p>
                     </div>
                   );
                 })}
@@ -276,13 +242,13 @@ export default function Anomalies() {
                             <Badge className={cn(modelStyles[item.model])}>{item.model}</Badge>
                           </TableCell>
                           <TableCell>
-                            {formatAnomalyConfidence(item.confidence)}
+                            {item.confidence_label}
                           </TableCell>
                           <TableCell>
-                            <Badge className={cn(severityStyles[severity])}>{severity}</Badge>
+                            <SeverityBadge severity={severity} />
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {new Date(item.detected_at).toLocaleString()}
+                            {item.detected_label}
                           </TableCell>
                         </TableRow>
                       );

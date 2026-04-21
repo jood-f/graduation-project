@@ -1,12 +1,6 @@
 import type { PanelStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 export const panelStatusStyles: Record<PanelStatus, string> = {
@@ -15,54 +9,33 @@ export const panelStatusStyles: Record<PanelStatus, string> = {
   FAULT: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
-export const panelStatusBadgeVariants: Record<
-  PanelStatus,
-  'default' | 'secondary' | 'destructive' | 'outline'
-> = {
-  OK: 'default',
-  WARNING: 'secondary',
-  FAULT: 'destructive',
-};
+interface PanelStatusExplanation {
+  title: string;
+  description: string;
+  recommendation: string;
+  basis: string;
+}
 
-const panelStatusLegendColors: Record<PanelStatus, string> = {
-  OK: 'bg-primary',
-  WARNING: 'bg-warning',
-  FAULT: 'bg-destructive',
-};
-
-const PANEL_STATUS_INFO: Record<
-  PanelStatus,
-  { summary: string; details: string[] }
-> = {
+const PANEL_STATUS_INFO: Record<PanelStatus, PanelStatusExplanation> = {
   OK: {
-    summary: 'Latest telemetry is normal and there are no active inspection failures for this panel.',
-    details: [
-      'The newest analyzed telemetry row is not marked as an anomaly.',
-      'No current CV inspection result with FAIL status is keeping the panel in warning or fault.',
-    ],
+    title: 'Panel healthy',
+    description: 'The latest telemetry looks normal and there is no active failed inspection driving the panel into warning or fault.',
+    recommendation: 'Keep monitoring the panel during normal operations.',
+    basis: 'Based on the latest ML telemetry result and active CV inspection results.',
   },
   WARNING: {
-    summary: 'The panel has a current issue that needs attention, but it is below the fault threshold.',
-    details: [
-      'This appears when the strongest active signal maps to a warning-level issue.',
-      'Typical causes are a non-high telemetry anomaly or an active inspection failure that is not high confidence.',
-    ],
+    title: 'Needs attention',
+    description: 'The panel currently has an issue, but it has not reached the highest severity level.',
+    recommendation: 'Review recent anomalies or inspection results soon.',
+    basis: 'This appears when the strongest active signal maps to a warning-level issue.',
   },
   FAULT: {
-    summary: 'The panel has a high-severity active issue and should be reviewed as a priority.',
-    details: [
-      'This appears when the strongest active signal maps to fault level.',
-      'Typical causes are a high telemetry anomaly or a high-confidence active inspection failure.',
-    ],
+    title: 'Priority issue',
+    description: 'The panel has a high-severity active issue and is more likely to affect performance.',
+    recommendation: 'Prioritize inspection or maintenance as soon as possible.',
+    basis: 'This appears when the strongest active signal maps to fault level.',
   },
 };
-
-const PANEL_STATUS_PIPELINE = [
-  'Checks the latest analyzed telemetry row for a current ML anomaly on the panel.',
-  'Checks active CV inspection results that still have FAIL status for the same panel.',
-  'Uses the strongest active signal, so FAULT overrides WARNING.',
-  'If neither source currently raises an issue, the panel returns to OK.',
-];
 
 function formatStatusLabel(status: PanelStatus) {
   if (status === 'WARNING') return 'Warning';
@@ -70,81 +43,58 @@ function formatStatusLabel(status: PanelStatus) {
   return 'OK';
 }
 
-interface PanelStatusExplanationDialogProps {
-  status: PanelStatus | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+export function getPanelStatusExplanation(status: PanelStatus): PanelStatusExplanation {
+  return PANEL_STATUS_INFO[status];
 }
 
-export function PanelStatusExplanationDialog({
-  status,
-  open,
-  onOpenChange,
-}: PanelStatusExplanationDialogProps) {
-  if (!status) return null;
+interface PanelStatusBadgeProps {
+  status: PanelStatus;
+  className?: string;
+}
 
-  const info = PANEL_STATUS_INFO[status];
+export function PanelStatusBadge({ status, className }: PanelStatusBadgeProps) {
+  const explanation = getPanelStatusExplanation(status);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Badge variant={panelStatusBadgeVariants[status]}>{status}</Badge>
-            Status Explanation
-          </DialogTitle>
-          <DialogDescription>{info.summary}</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="space-y-2 text-sm text-muted-foreground">
-            {info.details.map((detail) => (
-              <div key={detail} className="rounded-lg border bg-muted/20 p-3">
-                {detail}
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium">How It Is Determined</p>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              {PANEL_STATUS_PIPELINE.map((step) => (
-                <div key={step} className="rounded-lg border bg-muted/20 p-3">
-                  {step}
-                </div>
-              ))}
-            </div>
-          </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`What does ${status.toLowerCase()} status mean?`}
+        >
+          <Badge className={cn('cursor-help select-none', panelStatusStyles[status], className)}>
+            {status}
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 space-y-2 p-3" side="top">
+        <div className="flex items-center gap-2">
+          <Badge className={panelStatusStyles[status]}>{status}</Badge>
+          <p className="text-sm font-semibold">{explanation.title}</p>
         </div>
-      </DialogContent>
-    </Dialog>
+        <p className="text-sm text-muted-foreground">{explanation.description}</p>
+        <p className="text-xs text-muted-foreground">{explanation.recommendation}</p>
+        <p className="text-xs text-muted-foreground">{explanation.basis}</p>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-interface PanelStatusLegendProps {
-  onSelectStatus: (status: PanelStatus) => void;
-}
-
-export function PanelStatusLegend({ onSelectStatus }: PanelStatusLegendProps) {
+export function PanelStatusLegend() {
   return (
     <>
       <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
         <span className="text-muted-foreground">Status:</span>
         {(['OK', 'WARNING', 'FAULT'] as PanelStatus[]).map((status) => (
-          <button
-            key={status}
-            type="button"
-            onClick={() => onSelectStatus(status)}
-            className="flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent"
-            aria-label={`Explain ${status.toLowerCase()} status`}
-          >
-            <div className={cn('h-4 w-4 rounded', panelStatusLegendColors[status])} />
+          <div key={status} className="flex items-center gap-2">
+            <PanelStatusBadge status={status} />
             <span>{formatStatusLabel(status)}</span>
-          </button>
+          </div>
         ))}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        Click a status to learn how it is determined.
+        Tap a status badge to see what it means.
       </p>
     </>
   );
