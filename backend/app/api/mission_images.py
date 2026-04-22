@@ -7,8 +7,6 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
-
 from app.db.deps import get_db
 from app.core.config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_BUCKET
 from app.models.mission import Mission
@@ -387,11 +385,6 @@ def get_image_analysis_results(
     
     results = db.query(InspectionResult).filter(
         InspectionResult.mission_image_id == image_id
-    ).filter(
-        or_(
-            InspectionResult.model_version.is_(None),
-            ~InspectionResult.model_version.ilike("heuristic%")
-        )
     ).order_by(InspectionResult.inspected_at.desc()).all()
     
     return [

@@ -256,7 +256,7 @@ class CVModelService:
             detections.append(
                 {
                     "class_id": 3,
-                    "class_name": "Heuristic-Anomaly",
+                    "class_name": self.CLASS_NAMES.get(3, "Physical-Damage"),
                     "confidence": round(float(confidence), 4),
                     "bbox": {
                         "x": float(bx * inv_scale),
@@ -316,7 +316,10 @@ class CVModelService:
             detections.append(
                 {
                     "class_id": warm_class_id,
-                    "class_name": "Heuristic-Anomaly",
+                    "class_name": self.CLASS_NAMES.get(
+                        warm_class_id,
+                        "Electrical-damage" if is_localized_hotspot else "Dusty",
+                    ),
                     "confidence": round(float(confidence), 4),
                     "bbox": {
                         "x": float(x1 * inv_scale),

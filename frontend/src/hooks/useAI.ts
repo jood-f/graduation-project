@@ -76,6 +76,7 @@ export function useCreateInspectionResults() {
           mission_id: r.mission_id,
           panel_id: (r as any).panel_id ?? null,
           mission_image_id: r.mission_image_id ?? null,
+          status: 'FAIL',
           defect_type: r.defect_type,
           confidence: r.confidence,
           bbox: (r.bbox_width != null && r.bbox_height != null)
@@ -149,8 +150,19 @@ export function useCreateInspectionResults() {
     },
     onSuccess: (_, variables) => {
       if (variables.length > 0) {
-        console.log('[useAI] Invalidating query for mission:', variables[0].mission_id);
-        queryClient.invalidateQueries({ queryKey: ['inspection-results', variables[0].mission_id] });
+        const missionId = variables[0].mission_id;
+        const imageIds = [...new Set(
+          variables
+            .map((result) => result.mission_image_id)
+            .filter((imageId): imageId is string => typeof imageId === 'string' && imageId.length > 0)
+        )];
+
+        console.log('[useAI] Invalidating fallback queries for mission:', missionId);
+        queryClient.invalidateQueries({ queryKey: ['mission-cv-faults', missionId] });
+        queryClient.invalidateQueries({ queryKey: ['mission-cv-raw-by-image', missionId] });
+        for (const imageId of imageIds) {
+          queryClient.invalidateQueries({ queryKey: ['inspection-results', imageId] });
+        }
       }
     },
     onError: (error) => {

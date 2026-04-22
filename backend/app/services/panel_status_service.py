@@ -78,12 +78,6 @@ def derive_panel_status(db: Session, *, panel_id: uuid.UUID) -> PanelStatus:
         .join(Mission, InspectionResult.mission_id == Mission.id)
         .filter(or_(InspectionResult.panel_id == panel_id, Mission.panel_id == panel_id))
         .filter(InspectionResult.status == InspectionStatus.FAIL)
-        .filter(
-            or_(
-                InspectionResult.model_version.is_(None),
-                ~InspectionResult.model_version.ilike("heuristic%"),
-            )
-        )
         .order_by(InspectionResult.inspected_at.desc())
         .all()
     )
