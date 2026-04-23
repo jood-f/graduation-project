@@ -20,6 +20,7 @@ Set these environment variables in your Container App:
 
 Optional:
 
+- `CV_CLASSIFICATION_MODEL_PATH=/app/CV/best-cls.pt`
 - `CV_MODEL_PATH=/app/CV/best.pt`
 - `ML_MODEL_PATH=/app/ml/telemetry_power_model.h5`
 - `ML_SCALER_X_PATH=/app/ml/telemetry_scaler_X.joblib`
@@ -81,6 +82,7 @@ az containerapp create `
   --max-replicas 1 `
   --env-vars `
     SUPABASE_BUCKET=mission_images `
+    CV_CLASSIFICATION_MODEL_PATH=/app/CV/best-cls.pt `
     CV_MODEL_PATH=/app/CV/best.pt `
     ML_MODEL_PATH=/app/ml/telemetry_power_model.h5 `
     ML_SCALER_X_PATH=/app/ml/telemetry_scaler_X.joblib `
@@ -115,7 +117,7 @@ Check these endpoints:
 Expected:
 
 - `/health` returns HTTP `200`
-- `/api/v1/cv/status` should show `"available": true` and `"/app/CV/best.pt"` as the model path
+- `/api/v1/cv/status` should show `"available": true` and `"/app/CV/best-cls.pt"` as the preferred classifier model path
 
 ## Most likely reasons it still fails
 

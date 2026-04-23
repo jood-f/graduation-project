@@ -3,7 +3,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  useDeleteMissionImage,
+  useMissionImages,
+  type Mission,
+} from '@/hooks/useMissions';
+import { DefectAnalysis } from '@/components/missions/DefectAnalysis';
+import {
   AlertTriangle,
+  Image as ImageIcon,
+  ScanEye,
   Terminal,
   RefreshCw,
   Zap,
@@ -12,6 +30,11 @@ import {
   Maximize2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+const missionStatusStyles: Record<string, string> = {
+  OPEN: 'bg-info/10 text-info border-info/20',
+  COMPLETED: 'bg-success/10 text-success border-success/20',
+};
 
 export const AIAnalysisContent = ({
   detections = [],
@@ -205,3 +228,150 @@ export const AIAnalysisContent = ({
     </div>
   );
 };
+
+interface MissionDetailDialogProps {
+  mission: Mission | null;
+  open: boolean;
+  canDeleteImages: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function MissionDetailDialog({
+  mission,
+  open,
+  canDeleteImages,
+  onOpenChange,
+}: MissionDetailDialogProps) {
+  const { data: images, isLoading: imagesLoading } = useMissionImages(
+    mission?.id ?? null
+  );
+  const deleteMutation = useDeleteMissionImage();
+
+  if (!mission) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Inspection Details</DialogTitle>
+          <DialogDescription>
+            Inspection for panel {mission.panel_label}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          <div className="grid gap-4 text-sm sm:grid-cols-2">
+            <div>
+              <span className="text-muted-foreground">Status:</span>
+              <Badge
+                className={cn(
+                  'ml-2',
+                  missionStatusStyles[mission.status] || missionStatusStyles.OPEN
+                )}
+              >
+                {mission.status === 'OPEN'
+                  ? 'Open'
+                  : mission.status === 'COMPLETED'
+                    ? 'Completed'
+                    : mission.status.replace('_', ' ')}
+              </Badge>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Site:</span>
+              <span className="ml-2 break-words font-medium">
+                {mission.site_name}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Created:</span>
+              <span className="ml-2">
+                {new Date(mission.created_at).toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          <Tabs defaultValue="images" className="w-full">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1">
+              <TabsTrigger
+                value="images"
+                className="flex items-center gap-2 whitespace-normal px-2 py-2 text-xs sm:text-sm"
+              >
+                <ImageIcon className="h-4 w-4" />
+                Images ({images?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger
+                value="analysis"
+                className="flex items-center gap-2 whitespace-normal px-2 py-2 text-xs sm:text-sm"
+              >
+                <ScanEye className="h-4 w-4" />
+                AI Analysis
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="images" className="mt-4">
+              {imagesLoading ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Skeleton className="h-40 w-full" />
+                  <Skeleton className="h-40 w-full" />
+                </div>
+              ) : images && images.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {images.map((image) => (
+                    <div key={image.id} className="relative">
+                      <img
+                        src={image.url}
+                        alt="Inspection capture"
+                        className="h-40 w-full cursor-pointer rounded-lg object-cover transition-opacity hover:opacity-90"
+                        onClick={() =>
+                          window.open(image.url, '_blank', 'noopener,noreferrer')
+                        }
+                      />
+                      {canDeleteImages && mission.status === 'OPEN' && (
+                        <button
+                          className="absolute right-2 top-2 rounded bg-white/90 px-2 py-1 text-xs text-destructive shadow-sm transition hover:opacity-90 disabled:opacity-60"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!confirm('Delete this image?')) return;
+                            deleteMutation.mutate({
+                              imageId: image.id,
+                              missionId: mission.id,
+                            });
+                          }}
+                          disabled={deleteMutation.isPending}
+                        >
+                          {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+                  No images uploaded yet
+                </p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="analysis" className="mt-4">
+              <DefectAnalysis
+                missionId={mission.id}
+                imageCount={imagesLoading ? -1 : images?.length || 0}
+                missionImages={images || []}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="w-full sm:w-auto"
+          >
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

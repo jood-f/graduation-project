@@ -22,7 +22,7 @@ except Exception:  # pragma: no cover - defensive import fallback
 
 logger = logging.getLogger(__name__)
 
-# Lazy load ultralytics to avoid import errors if not installed
+# Lazy-load Ultralytics so the API can still boot and report a clear error if the package is missing.
 YOLO = None
 
 
@@ -41,7 +41,7 @@ def _load_yolo():
 class CVModelService:
     """Service for YOLOv8 solar panel defect detection"""
 
-    # Class mapping for your trained model
+    # Keep runtime labels aligned with the order used during training.
     CLASS_NAMES = {
         0: "Clean",
         1: "Dusty",
@@ -61,26 +61,64 @@ class CVModelService:
         self.model = None
         self.model_path = model_path
         self.model_version = "yolov8-solar-v1"
+        self.model_task = "unknown"
         self.unavailable_reason: Optional[str] = None
         self.model_search_paths: List[str] = []
         self.allow_heuristic_fallback = str(
             os.getenv("CV_ALLOW_HEURISTIC_FALLBACK", "false")
         ).strip().lower() in {"1", "true", "yes", "on"}
-        self.detection_mode: str = "none"  # yolo | heuristic | none
+        self.detection_mode: str = "none"
         self._load_model()
+
+    def _latest_weight_candidates(self, search_roots: List[Path], patterns: List[str]) -> List[Path]:
+        matches: List[Path] = []
+        for root in search_roots:
+            if not root.exists():
+                continue
+            for pattern in patterns:
+                matches.extend(root.glob(pattern))
+
+        unique_matches: List[Path] = []
+        for path in sorted(matches, key=lambda candidate: candidate.stat().st_mtime, reverse=True):
+            if path.exists() and path not in unique_matches:
+                unique_matches.append(path)
+        return unique_matches
 
     def _candidate_model_paths(self) -> List[Path]:
         if self.model_path is not None:
             return [Path(self.model_path)]
 
         candidates: List[Path] = []
+        env_classification_model_path = os.getenv("CV_CLASSIFICATION_MODEL_PATH")
+        if env_classification_model_path:
+            candidates.append(Path(env_classification_model_path))
+
         env_model_path = os.getenv("CV_MODEL_PATH")
         if env_model_path:
             candidates.append(Path(env_model_path))
 
         base_path = Path(__file__).resolve().parents[3]
+        run_roots = [
+            base_path / "CV" / "YOLO_RESULTS",
+            Path.cwd() / "CV" / "YOLO_RESULTS",
+        ]
+        # Prefer the newest classifier first, then fall back to the older detector layout.
+        candidates.extend(
+            self._latest_weight_candidates(
+                run_roots,
+                [
+                    "run_*/runs/classify_train/weights/best.pt",
+                    "run_*/classify_train/weights/best.pt",
+                ],
+            )
+        )
         candidates.extend(
             [
+                base_path / "CV" / "best-cls.pt",
+                base_path / "backend" / "CV" / "best-cls.pt",
+                base_path / "backend" / "models" / "cv" / "best-cls.pt",
+                Path.cwd() / "CV" / "best-cls.pt",
+                Path.cwd() / "backend" / "models" / "cv" / "best-cls.pt",
                 base_path / "CV" / "YOLO_RESULTS" / "run_20260210_194054" / "runs" / "detect_train" / "weights" / "best.pt",
                 base_path / "CV" / "runs" / "detect" / "train" / "weights" / "best.pt",
                 base_path / "CV" / "best.pt",
@@ -91,12 +129,40 @@ class CVModelService:
                 Path.cwd() / "runs" / "detect" / "train" / "weights" / "best.pt",
             ]
         )
+        candidates.extend(
+            self._latest_weight_candidates(
+                run_roots,
+                [
+                    "run_*/runs/detect_train/weights/best.pt",
+                    "run_*/runs/solar_detection/weights/best.pt",
+                ],
+            )
+        )
 
         unique: List[Path] = []
         for path in candidates:
             if path not in unique:
                 unique.append(path)
         return unique
+
+    def _infer_model_task(self) -> str:
+        task_candidates = [
+            getattr(self.model, "task", None),
+            getattr(getattr(self.model, "model", None), "task", None),
+        ]
+        for task in task_candidates:
+            normalized = str(task or "").strip().lower()
+            if normalized in {"classify", "classification", "cls"}:
+                return "classification"
+            if normalized in {"detect", "detection"}:
+                return "detection"
+
+        # Ultralytics task metadata is not always populated the same way across versions,
+        # so the filename is our last reliable hint.
+        normalized_path = str(self.model_path or "").strip().lower()
+        if any(token in normalized_path for token in ("best-cls.pt", "classify_train", "-cls")):
+            return "classification"
+        return "detection"
 
     def _load_model(self):
         """Load the trained YOLOv8 model"""
@@ -130,11 +196,17 @@ class CVModelService:
             self.model = YOLO_cls(self.model_path)
             logger.info(f"CV Model loaded from {self.model_path}")
             self.unavailable_reason = None
-            self.model_version = "yolov8-solar-v1"
-            self.detection_mode = "yolo"
+            self.model_task = self._infer_model_task()
+            if self.model_task == "classification":
+                self.model_version = "yolov8-solar-cls-v1"
+                self.detection_mode = "classification"
+            else:
+                self.model_version = "yolov8-solar-v1"
+                self.detection_mode = "yolo"
         except Exception as e:
             logger.error(f"Failed to load CV model: {e}")
             self.model = None
+            self.model_task = "unknown"
             self.unavailable_reason = f"YOLO load failed: {e}"
             if self.allow_heuristic_fallback and cv2 is not None and np is not None:
                 self.model_version = "heuristic-cv-v2"
@@ -183,24 +255,28 @@ class CVModelService:
 
         return self.CLASS_NAMES.get(class_id, f"class_{class_id}")
 
-    def _heuristic_detect(self, image_path: str, confidence_threshold: float = 0.5) -> List[Dict]:
-        """
-        Fallback detector when YOLO is unavailable.
-        Targets crack-like physical damage and visible soiling/streak anomalies.
-        """
+    def _load_analysis_image(self, image_path: str):
         if cv2 is None or np is None:
-            raise RuntimeError("OpenCV fallback unavailable: cv2/numpy are not installed")
+            raise RuntimeError("OpenCV analysis unavailable: cv2/numpy are not installed")
+
         image = cv2.imread(image_path)
         if image is None:
-            raise RuntimeError(f"Failed to read image for heuristic detection: {image_path}")
+            raise RuntimeError(f"Failed to read image for CV analysis: {image_path}")
 
         orig_h, orig_w = image.shape[:2]
         max_dim = max(orig_h, orig_w)
         scale = 1.0
         if max_dim > 1280:
             scale = 1280.0 / max_dim
-            image = cv2.resize(image, (int(orig_w * scale), int(orig_h * scale)), interpolation=cv2.INTER_AREA)
+            image = cv2.resize(
+                image,
+                (int(orig_w * scale), int(orig_h * scale)),
+                interpolation=cv2.INTER_AREA,
+            )
 
+        return image, scale, orig_h, orig_w
+
+    def _compute_crack_metrics(self, image) -> Dict[str, float | bool | tuple[int, int, int, int] | None]:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(gray, threshold1=50, threshold2=150)
@@ -208,7 +284,6 @@ class CVModelService:
         total_px = edges.shape[0] * edges.shape[1]
         edge_ratio = float(np.count_nonzero(edges)) / float(total_px)
 
-        # Orientation entropy: cracked areas usually have many random edge orientations.
         lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=60, minLineLength=20, maxLineGap=8)
         angles = []
         if lines is not None:
@@ -218,14 +293,26 @@ class CVModelService:
                 angles.append(angle)
 
         entropy_norm = 0.0
+        dominant_share = 0.0
+        mean_line_length = 0.0
+        max_line_length = 0.0
         if len(angles) >= 10:
             hist, _ = np.histogram(angles, bins=18, range=(0.0, 180.0))
             p = hist.astype(float) / max(float(hist.sum()), 1.0)
             p = p[p > 0]
             entropy = float(-(p * np.log2(p)).sum())
             entropy_norm = entropy / np.log2(18.0)
+            dominant_share = float(hist.max()) / float(hist.sum())
 
-        # Largest connected edge component for approximate bbox.
+        if lines is not None:
+            lengths = []
+            for line in lines[:, 0]:
+                x1, y1, x2, y2 = line
+                lengths.append(float(np.hypot(x2 - x1, y2 - y1)))
+            if lengths:
+                mean_line_length = float(np.mean(lengths))
+                max_line_length = float(np.max(lengths))
+
         num_labels, _, stats, _ = cv2.connectedComponentsWithStats((edges > 0).astype(np.uint8), 8)
         largest_area = 0
         crack_bbox = None
@@ -240,9 +327,157 @@ class CVModelService:
                 crack_bbox = (x, y, w, h)
 
         largest_ratio = float(largest_area) / float(total_px)
-
         crack_score = (edge_ratio * 3.0) + (entropy_norm * 0.8) + min(0.2, largest_ratio * 5.0)
         is_crack_like = crack_score >= 0.55 and entropy_norm >= 0.35 and edge_ratio >= 0.05
+
+        return {
+            "edge_ratio": edge_ratio,
+            "entropy_norm": entropy_norm,
+            "largest_ratio": largest_ratio,
+            "crack_score": crack_score,
+            "crack_bbox": crack_bbox,
+            "is_crack_like": is_crack_like,
+            "dominant_share": dominant_share,
+            "mean_line_length": mean_line_length,
+            "max_line_length": max_line_length,
+        }
+
+    def _crop_analysis_image(self, image, bbox: Optional[Dict[str, float]], scale: float):
+        if image is None or bbox is None:
+            return None
+
+        image_h, image_w = image.shape[:2]
+        x = max(0, int(round(float(bbox.get("x") or 0.0) * scale)))
+        y = max(0, int(round(float(bbox.get("y") or 0.0) * scale)))
+        width = max(0, int(round(float(bbox.get("width") or 0.0) * scale)))
+        height = max(0, int(round(float(bbox.get("height") or 0.0) * scale)))
+        x2 = min(image_w, x + width)
+        y2 = min(image_h, y + height)
+
+        if x >= x2 or y >= y2:
+            return None
+
+        return image[y:y2, x:x2]
+
+    def _bbox_coverage(
+        self,
+        bbox: Optional[Dict[str, float]],
+        *,
+        image_width: int,
+        image_height: int,
+    ) -> Optional[float]:
+        if not bbox:
+            return None
+
+        width = max(0.0, float(bbox.get("width") or 0.0))
+        height = max(0.0, float(bbox.get("height") or 0.0))
+        if image_width <= 0 or image_height <= 0:
+            return None
+
+        bounded_width = min(width, float(image_width))
+        bounded_height = min(height, float(image_height))
+        return (bounded_width * bounded_height) / float(image_width * image_height)
+
+    def _should_keep_model_detection(
+        self,
+        detection: Dict,
+        *,
+        image_width: int,
+        image_height: int,
+        crack_metrics: Dict[str, float | bool | tuple[int, int, int, int] | None] | None,
+        confidence_threshold: float,
+    ) -> bool:
+        normalized_class = str(detection.get("class_name") or "").strip().lower()
+        if normalized_class != "physical-damage":
+            return True
+
+        bbox_coverage = self._bbox_coverage(
+            detection.get("bbox"),
+            image_width=image_width,
+            image_height=image_height,
+        )
+        if bbox_coverage is None:
+            return True
+
+        confidence = float(detection.get("confidence") or 0.0)
+        minimum_supported_confidence = max(0.78, confidence_threshold + 0.18)
+        if confidence >= minimum_supported_confidence:
+            return True
+
+        dominant_share = float(crack_metrics.get("dominant_share", 0.0)) if crack_metrics else 0.0
+        entropy_norm = float(crack_metrics.get("entropy_norm", 0.0)) if crack_metrics else 0.0
+        max_line_length = float(crack_metrics.get("max_line_length", 0.0)) if crack_metrics else 0.0
+        bbox = detection.get("bbox") or {}
+        bbox_width = max(1.0, float(bbox.get("width") or 0.0))
+        bbox_height = max(1.0, float(bbox.get("height") or 0.0))
+        localized_panel_line_pattern = (
+            confidence < max(0.72, confidence_threshold + 0.15)
+            and dominant_share >= 0.65
+            and entropy_norm <= 0.42
+            and max_line_length >= max(bbox_width, bbox_height) * 0.9
+        )
+        if localized_panel_line_pattern:
+            logger.info(
+                (
+                    "Suppressing YOLO panel-line-like physical-damage detection "
+                    "confidence=%.4f coverage=%.4f dominant_share=%.4f entropy=%.4f max_line_length=%.4f"
+                ),
+                confidence,
+                bbox_coverage,
+                dominant_share,
+                entropy_norm,
+                max_line_length,
+            )
+            return False
+
+        smallest_dimension = min(image_width, image_height)
+        thumbnail_confidence_floor = max(0.9, confidence_threshold + 0.4)
+        if bbox_coverage >= 0.85 and smallest_dimension <= 256 and confidence < thumbnail_confidence_floor:
+            logger.info(
+                (
+                    "Suppressing YOLO thumbnail-sized physical-damage detection "
+                    "confidence=%.4f coverage=%.4f min_dimension=%s floor=%.4f"
+                ),
+                confidence,
+                bbox_coverage,
+                smallest_dimension,
+                thumbnail_confidence_floor,
+            )
+            return False
+
+        if bbox_coverage < 0.55:
+            return True
+
+        if crack_metrics and bool(crack_metrics.get("is_crack_like")):
+            return True
+
+        logger.info(
+            (
+                "Suppressing YOLO physical-damage detection without crack evidence "
+                "confidence=%.4f coverage=%.4f crack_score=%.4f edge_ratio=%.4f entropy=%.4f"
+            ),
+            confidence,
+            bbox_coverage,
+            float(crack_metrics.get("crack_score", 0.0)) if crack_metrics else 0.0,
+            float(crack_metrics.get("edge_ratio", 0.0)) if crack_metrics else 0.0,
+            float(crack_metrics.get("entropy_norm", 0.0)) if crack_metrics else 0.0,
+        )
+        return False
+
+    def _heuristic_detect(self, image_path: str, confidence_threshold: float = 0.5) -> List[Dict]:
+        """
+        Fallback detector when YOLO is unavailable.
+        Targets crack-like physical damage and visible soiling/streak anomalies.
+        """
+        image, scale, _, _ = self._load_analysis_image(image_path)
+        crack_metrics = self._compute_crack_metrics(image)
+        total_px = image.shape[0] * image.shape[1]
+        edge_ratio = float(crack_metrics["edge_ratio"])
+        entropy_norm = float(crack_metrics["entropy_norm"])
+        largest_ratio = float(crack_metrics["largest_ratio"])
+        crack_score = float(crack_metrics["crack_score"])
+        crack_bbox = crack_metrics["crack_bbox"]
+        is_crack_like = bool(crack_metrics["is_crack_like"])
         detections: List[Dict] = []
 
         if is_crack_like:
@@ -384,15 +619,13 @@ class CVModelService:
             detections = []
 
             for result in results:
-                # Handle detection results
                 if hasattr(result, 'boxes') and result.boxes is not None:
                     for box in result.boxes:
                         class_id = int(box.cls[0])
                         confidence = float(box.conf[0])
-                        
-                        # Get bounding box coordinates (x1, y1, x2, y2)
+
                         xyxy = box.xyxy[0].cpu().numpy()
-                        
+
                         detection = {
                             "class_id": class_id,
                             "class_name": self._resolve_class_name(class_id, result),
@@ -406,19 +639,49 @@ class CVModelService:
                         }
                         detections.append(detection)
 
-                # Handle classification results (if using classification model)
                 elif hasattr(result, 'probs') and result.probs is not None:
                     probs = result.probs
                     top_class = int(probs.top1)
                     top_conf = float(probs.top1conf)
-                    
+
+                    # Keep classifier responses in the same payload shape the detector already returns.
                     detection = {
                         "class_id": top_class,
                         "class_name": self._resolve_class_name(top_class, result),
                         "confidence": round(top_conf, 4),
-                        "bbox": None  # Classification doesn't have bounding boxes
+                        "bbox": None
                     }
                     detections.append(detection)
+
+            if detections and cv2 is not None and np is not None:
+                if any(
+                    str(detection.get("class_name") or "").strip().lower() == "physical-damage"
+                    and detection.get("bbox") is not None
+                    for detection in detections
+                ):
+                    try:
+                        analysis_image, scale, orig_h, orig_w = self._load_analysis_image(image_path)
+                        filtered_detections = []
+                        for detection in detections:
+                            crop_image = self._crop_analysis_image(
+                                analysis_image,
+                                detection.get("bbox"),
+                                scale,
+                            )
+                            crack_metrics = self._compute_crack_metrics(
+                                crop_image if crop_image is not None else analysis_image
+                            )
+                            if self._should_keep_model_detection(
+                                detection,
+                                image_width=orig_w,
+                                image_height=orig_h,
+                                crack_metrics=crack_metrics,
+                                confidence_threshold=confidence_threshold,
+                            ):
+                                filtered_detections.append(detection)
+                        detections = filtered_detections
+                    except Exception as e:
+                        logger.warning("Failed to run YOLO false-positive suppression: %s", e)
 
             return detections
 

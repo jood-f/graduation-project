@@ -25,6 +25,7 @@ COPY backend/migrations ./migrations
 COPY ml/telemetry_power_model.h5 ./ml/telemetry_power_model.h5
 COPY ml/telemetry_scaler_X.joblib ./ml/telemetry_scaler_X.joblib
 COPY ml/telemetry_scaler_y.joblib ./ml/telemetry_scaler_y.joblib
+COPY CV/best-cls.pt ./CV/best-cls.pt
 COPY CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/weights/best.pt ./CV/best.pt
 
 EXPOSE 8000
