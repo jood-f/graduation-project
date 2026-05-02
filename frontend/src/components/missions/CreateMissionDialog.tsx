@@ -76,7 +76,7 @@ export function CreateMissionDialog({ open, onOpenChange }) {
     onOpenChange(false);
   };
 
-  // STEP 1: create mission
+  // create mission
   const onSubmit = async (values: MissionFormValues) => {
     const panel = panels.find(p => p.id === values.panelId);
     if (!panel) return;
@@ -89,13 +89,12 @@ export function CreateMissionDialog({ open, onOpenChange }) {
 
     setMissionId(res.id);
 
-    // IMPORTANT: stay inside same popup, now show upload section
     setUploading(true);
   };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="bg-[#060b09] text-white border-white/10 sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
 
         <DialogHeader>
           <DialogTitle>New Inspection</DialogTitle>
@@ -104,12 +103,12 @@ export function CreateMissionDialog({ open, onOpenChange }) {
           </DialogDescription>
         </DialogHeader>
 
-        {/* ================= STEP 1: FORM ================= */}
+        {}
         {!uploading && (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
 
-              {/* SITE */}
+              {}
               <FormField
                 control={form.control}
                 name="siteId"
@@ -125,7 +124,7 @@ export function CreateMissionDialog({ open, onOpenChange }) {
                       }}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="text-foreground">
                           <SelectValue placeholder="Select site" />
                         </SelectTrigger>
                       </FormControl>
@@ -141,7 +140,7 @@ export function CreateMissionDialog({ open, onOpenChange }) {
                 )}
               />
 
-              {/* PANEL */}
+              {}
               <FormField
                 control={form.control}
                 name="panelId"
@@ -154,7 +153,7 @@ export function CreateMissionDialog({ open, onOpenChange }) {
                       disabled={!selectedSite}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="text-foreground">
                           <SelectValue placeholder="Select panel" />
                         </SelectTrigger>
                       </FormControl>
@@ -193,7 +192,7 @@ export function CreateMissionDialog({ open, onOpenChange }) {
           </Form>
         )}
 
-        {/* ================= STEP 2: UPLOAD INSIDE SAME POPUP ================= */}
+        {}
         {uploading && missionId && (
           <div className="space-y-4">
             <div className="text-sm text-gray-400">
@@ -208,7 +207,6 @@ export function CreateMissionDialog({ open, onOpenChange }) {
                 if (!open) {
                   handleClose();
 
-                  // 🔥 SAME AS TABLE BEHAVIOR
                   await queryClient.invalidateQueries({ queryKey: ['missions'] });
                   await queryClient.invalidateQueries({ queryKey: ['mission', missionId] });
                 }
