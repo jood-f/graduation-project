@@ -178,16 +178,7 @@ export default function Missions() {
                       </p>
 
                       <div className="grid gap-2 sm:grid-cols-2">
-                        {canUploadImages && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setUploadMission(mission)}
-                          >
-                            <Upload className="mr-2 h-4 w-4" />
-                            Upload
-                          </Button>
-                        )}
+                    
 
                         {mission.status === 'OPEN' && canManage && (
                           <Button
@@ -265,17 +256,7 @@ export default function Missions() {
 
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              {canUploadImages && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  title="Upload inspection images"
-                                  aria-label={`Upload images for inspection ${mission.id}`}
-                                  onClick={() => setUploadMission(mission)}
-                                >
-                                  <Upload className="h-4 w-4" />
-                                </Button>
-                              )}
+            
 
                               {mission.status === 'OPEN' && canManage && (
                                 <Button
