@@ -15,6 +15,7 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 from tensorflow.keras import models, layers
 import sys
+from sklearn.model_selection import TimeSeriesSplit  
 
 warnings.filterwarnings("ignore")
 
@@ -158,6 +159,58 @@ def build_model(input_shape, output_units=1):
     ])
     return model
 
+# cross-validation using TimeSeriesSplit
+def cross_validate_model(df, feature_cols, target_col, window_size):
+    print("\n" + "="*60)
+    print("TIME SERIES CROSS VALIDATION")
+    print("="*60)
+
+    tscv = TimeSeriesSplit(n_splits=5)
+    scores = []
+    fold = 1
+
+    for train_idx, test_idx in tscv.split(df):
+        print(f"\nFold {fold}/5")
+
+        df_train = df.iloc[train_idx]
+        df_test = df.iloc[test_idx]
+
+        scaler_fold = StandardScaler()
+        train_scaled = scaler_fold.fit_transform(df_train[feature_cols].to_numpy())
+        test_scaled = scaler_fold.transform(df_test[feature_cols].to_numpy())
+
+        def make_seq(data, labels):
+            X, y = [], []
+            for i in range(len(data) - window_size):
+                X.append(data[i:i+window_size])
+                y.append(labels[i+window_size])
+            return np.array(X), np.array(y)
+
+        X_train, y_train = make_seq(train_scaled, df_train[target_col].to_numpy())
+        X_test, y_test = make_seq(test_scaled, df_test[target_col].to_numpy())
+
+        if len(X_train) == 0 or len(X_test) == 0:
+            print("Skipping fold (not enough data)")
+            continue
+
+        model = build_model((window_size, len(feature_cols)))
+        model.compile(optimizer='adam', loss='mse')
+
+        model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
+
+        y_pred = model.predict(X_test, verbose=0)
+
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        print(f"RMSE: {rmse:.4f}")
+
+        scores.append(rmse)
+        fold += 1
+
+    print("\n" + "="*60)
+    print(f"CV Mean RMSE: {np.mean(scores):.4f}")
+    print(f"CV Std RMSE: {np.std(scores):.4f}")
+    print("="*60)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Train LSTM on solar telemetry data")
@@ -204,8 +257,11 @@ def main():
     print(f"\nData statistics:")
     print(df[feature_cols + [target_col]].describe())
 
+    # Perform Cross Validation
+    cross_validate_model(df, feature_cols, target_col, WINDOW_SIZE)
+
     if args.save_scalers_only:
-        # Fit and save feature + target scalers (no model training)
+        # Fit and save feature + target scalers 
         scaler.fit(df[feature_cols].to_numpy())
         scaler_y = StandardScaler()
         scaler_y.fit(df[target_col].to_numpy().reshape(-1, 1))
