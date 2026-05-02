@@ -2,10 +2,8 @@ import { type DragEvent, type KeyboardEvent, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Upload, Loader2, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Upload, Loader2, Image as ImageIcon } from 'lucide-react';
 import { useUploadMissionImage } from '@/hooks/useMissions';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -21,7 +19,6 @@ interface MissionImageUploadProps {
 export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange }: MissionImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [enableAI, setEnableAI] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadMutation = useUploadMissionImage();
@@ -93,7 +90,7 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
 
-    setIsAnalyzing(enableAI);
+    setIsAnalyzing(true);
     const failedFiles: File[] = [];
     try {
       for (const file of selectedFiles) {
@@ -101,7 +98,7 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
           await uploadMutation.mutateAsync({ 
             missionId, 
             file,
-            enableAI 
+            enableAI: true,
           });
         } catch (error) {
           console.error(`Failed to upload ${file.name}:`, error);
@@ -200,22 +197,6 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
             </div>
           )}
 
-          <div className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-3 sm:flex-row sm:items-center sm:space-x-2">
-            <Switch
-              id="ai-analysis"
-              checked={enableAI}
-              onCheckedChange={setEnableAI}
-            />
-            <div className="flex-1">
-              <Label htmlFor="ai-analysis" className="flex items-center gap-2 cursor-pointer">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="font-medium">AI Defect Detection</span>
-              </Label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Automatically detect defects using YOLOv8 computer vision model
-              </p>
-            </div>
-          </div>
         </div>
 
         <DialogFooter>

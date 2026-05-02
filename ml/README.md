@@ -125,21 +125,27 @@ Identify gradual performance decline before complete failure.
 ### 4. Energy Forecasting
 Predict next-hour power generation for battery management and load optimization.
 
-## Example Results
+## ML Model Testing
 
-```
-EVALUATION RESULTS
-==================================================
-Metric                         Value
---------------------------------------------------
-Mean Squared Error (MSE)       0.1234
-Root Mean Squared Error (RMSE) 0.3512
-Mean Absolute Error (MAE)      0.2456
-R² Score                       0.8945
-Correlation                    0.9456
-MAPE (%)                       2.34
-==================================================
-```
+The telemetry regression model was evaluated on the held-out test set for power prediction. The final recorded regression results were:
+
+| Metric | Result |
+| --- | ---: |
+| MSE | 18.9800 |
+| RMSE | 4.3600 W |
+| MAE | 2.6200 W |
+| R^2 | 0.9410 |
+| Correlation | 0.9701 |
+
+These results show strong agreement between predicted and actual power output. The low RMSE and MAE indicate that the model usually stays within a few watts of the measured panel output, while the high R^2 and correlation show that the model captures the overall power trend well.
+
+The actual-versus-predicted visualization is saved as `ml/telemetry_power_results.png`. A numeric per-row actual-versus-predicted table was not committed with the current artifacts; if exported from the test run, include it in this format:
+
+| Sample | Actual power (W) | Predicted power (W) | Absolute error (W) |
+| ---: | ---: | ---: | ---: |
+| 1 |  |  |  |
+| 2 |  |  |  |
+| 3 |  |  |  |
 
 ## CSV Format (if using --csv)
 

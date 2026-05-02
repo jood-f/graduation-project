@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-import { Switch } from '@/components/ui/switch';
 import { Loader2, Upload } from 'lucide-react';
 
 import { useCreateMission } from '@/hooks/useMissions';
@@ -42,7 +41,6 @@ import { MissionImageUpload } from '@/components/missions/MissionImageUpload';
 const missionSchema = z.object({
   panelId: z.string().min(1),
   siteId: z.string().min(1),
-  aiDetection: z.boolean().default(true),
 });
 
 type MissionFormValues = z.infer<typeof missionSchema>;
@@ -63,7 +61,6 @@ export function CreateMissionDialog({ open, onOpenChange }) {
     defaultValues: {
       panelId: '',
       siteId: '',
-      aiDetection: true,
     },
   });
 
@@ -86,7 +83,6 @@ export function CreateMissionDialog({ open, onOpenChange }) {
 
     const res = await createMutation.mutateAsync({
       panel_id: panel.id,
-      ai_detection: values.aiDetection,
     });
 
     if (!res?.id) return;
@@ -171,26 +167,6 @@ export function CreateMissionDialog({ open, onOpenChange }) {
                       </SelectContent>
                     </Select>
                   </FormItem>
-                )}
-              />
-
-              {/* AI */}
-              <FormField
-                control={form.control}
-                name="aiDetection"
-                render={({ field }) => (
-                  <div className="flex justify-between p-3 bg-white/5 rounded-lg">
-                    <div>
-                      <p className="text-sm">AI Detection</p>
-                      <p className="text-xs text-gray-400">
-                        YOLOv8 analysis enabled
-                      </p>
-                    </div>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </div>
                 )}
               />
 

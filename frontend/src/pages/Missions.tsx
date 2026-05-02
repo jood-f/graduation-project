@@ -19,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Clock, CheckCircle, Eye, Plus } from 'lucide-react';
+import { Clock, CheckCircle, Eye, Plus, Upload } from 'lucide-react';
 import { useSites } from '@/hooks/useSites';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +30,7 @@ import {
 } from '@/hooks/useMissions';
 import { MissionDetailDialog } from '@/components/missions/MissionDetailDialog';
 import { CreateMissionDialog } from '@/components/missions/CreateMissionDialog';
+import { MissionImageUpload } from '@/components/missions/MissionImageUpload';
 
 type MissionStatus = 'OPEN' | 'COMPLETED';
 
@@ -49,6 +50,7 @@ export default function Missions() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
+  const [uploadMission, setUploadMission] = useState<Mission | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const { data: missions, isLoading } = useMissions();
@@ -140,6 +142,7 @@ export default function Missions() {
                 {filteredMissions.map(mission => {
                   const StatusIcon =
                     statusIcons[mission.status as MissionStatus] || Clock;
+                  const canUploadImages = mission.status !== 'COMPLETED';
 
                   return (
                     <div
@@ -175,6 +178,17 @@ export default function Missions() {
                       </p>
 
                       <div className="grid gap-2 sm:grid-cols-2">
+                        {canUploadImages && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setUploadMission(mission)}
+                          >
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload
+                          </Button>
+                        )}
+
                         {mission.status === 'OPEN' && canManage && (
                           <Button
                             variant="outline"
@@ -186,14 +200,16 @@ export default function Missions() {
                           </Button>
                         )}
 
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedMission(mission)}
-                        >
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </Button>
+                        {mission.image_count > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedMission(mission)}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            View
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -217,6 +233,7 @@ export default function Missions() {
                     {filteredMissions.map(mission => {
                       const StatusIcon =
                         statusIcons[mission.status as MissionStatus] || Clock;
+                      const canUploadImages = mission.status !== 'COMPLETED';
 
                       return (
                         <TableRow key={mission.id}>
@@ -248,6 +265,18 @@ export default function Missions() {
 
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
+                              {canUploadImages && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Upload inspection images"
+                                  aria-label={`Upload images for inspection ${mission.id}`}
+                                  onClick={() => setUploadMission(mission)}
+                                >
+                                  <Upload className="h-4 w-4" />
+                                </Button>
+                              )}
+
                               {mission.status === 'OPEN' && canManage && (
                                 <Button
                                   variant="ghost"
@@ -258,13 +287,15 @@ export default function Missions() {
                                 </Button>
                               )}
 
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedMission(mission)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                              {mission.image_count > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedMission(mission)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -295,6 +326,19 @@ export default function Missions() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
       />
+
+      {uploadMission && (
+        <MissionImageUpload
+          missionId={uploadMission.id}
+          missionLabel={`${uploadMission.panel_label} - ${uploadMission.site_name}`}
+          open={!!uploadMission}
+          onOpenChange={(open) => {
+            if (!open) {
+              setUploadMission(null);
+            }
+          }}
+        />
+      )}
     </MainLayout>
   );
 }

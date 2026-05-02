@@ -17,6 +17,7 @@ export interface Mission {
   site_name: string;
   status: string;
   created_at: string;
+  image_count: number;
 }
 
 interface MissionRow {
@@ -69,13 +70,33 @@ export function useMissions() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return (data as unknown as MissionRow[]).map((row) => ({
+
+      const rows = data as unknown as MissionRow[];
+      const missionIds = rows.map((row) => row.id);
+      const imageCounts = new Map<string, number>();
+
+      if (missionIds.length > 0) {
+        const { data: imageRows, error: imageError } = await supabase
+          .from('mission_images')
+          .select('mission_id')
+          .in('mission_id', missionIds);
+
+        if (imageError) throw imageError;
+
+        (imageRows || []).forEach((image) => {
+          const missionId = image.mission_id;
+          imageCounts.set(missionId, (imageCounts.get(missionId) || 0) + 1);
+        });
+      }
+
+      return rows.map((row) => ({
         id: row.id,
         panel_id: row.panel_id,
         status: normalizeMissionStatus(row.status),
         created_at: row.created_at,
         panel_label: row.panels?.label || 'Unknown Panel',
         site_name: row.panels?.sites?.name || 'Unknown Site',
+        image_count: imageCounts.get(row.id) || 0,
       })) as Mission[];
     },
   });
@@ -344,6 +365,7 @@ export function useUploadMissionImage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['mission-images', variables.missionId] });
+      queryClient.invalidateQueries({ queryKey: ['missions'] });
       // Show success toast (AI handler will show its own toasts if enabled)
       if (!variables.enableAI) {
         toast.success('Image uploaded successfully!');
@@ -373,6 +395,7 @@ export function useDeleteMissionImage() {
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['mission-images', vars.missionId] });
+      queryClient.invalidateQueries({ queryKey: ['missions'] });
       toast.success('Image deleted');
     },
     onError: (err) => {
