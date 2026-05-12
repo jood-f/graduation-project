@@ -524,11 +524,6 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
           </div>
         </div>
 
-        <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-          <p className="text-sm font-medium text-primary mb-1">Recommended Action</p>
-          <p className="text-sm text-muted-foreground">{recommendedAction}</p>
-        </div>
-
         {renderRawDebugSection()}
 
         <p className="text-xs text-center text-muted-foreground">Analyzed by YOLOv8 - Solar Panel Classification Model</p>
