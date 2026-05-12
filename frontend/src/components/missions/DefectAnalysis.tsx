@@ -270,7 +270,6 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
           {!item.error && item.detections.length > 0 && (
             <div className="space-y-1">
               {item.detections.map((d) => {
-                const bbox = d.bbox || {};
                 return (
                   <div key={d.inspection_id} className="text-xs rounded border bg-muted/40 p-2">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -311,9 +310,6 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
                       <p>model: {d.model_version}</p>
                     )}
                     <p>confidence: {(d.confidence * 100).toFixed(2)}%</p>
-                    <p>
-                      bbox: x={Number(bbox.x || 0).toFixed(4)} y={Number(bbox.y || 0).toFixed(4)} w={Number(bbox.width || 0).toFixed(4)} h={Number(bbox.height || 0).toFixed(4)}
-                    </p>
                     {d.notes && <p>notes: {d.notes}</p>}
                   </div>
                 );
