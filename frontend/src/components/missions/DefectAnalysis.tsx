@@ -269,55 +269,49 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
 
           {!item.error && item.detections.length > 0 && (
             <div className="space-y-1">
-              {item.detections.map((d) => {
-                const bbox = d.bbox || {};
-                return (
-                  <div key={d.inspection_id} className="text-xs rounded border bg-muted/40 p-2">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <span className="font-medium">
-                        class: {d.class_name}
-                      </span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {d.status === 'FAIL' && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-[10px] text-destructive hover:text-destructive"
-                            disabled={dismissMutation.isPending}
-                            onClick={() => dismissMutation.mutate({ inspectionId: d.inspection_id })}
-                            title="Dismiss this detection as incorrect"
-                          >
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Dismiss
-                          </Button>
-                        )}
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'text-[10px]',
-                            d.status === 'FAIL'
-                              ? 'border-destructive/30 text-destructive'
-                              : d.status === 'PASS'
-                              ? 'border-success/30 text-success'
-                              : ''
-                          )}
+              {item.detections.map((d) => (
+                <div key={d.inspection_id} className="text-xs rounded border bg-muted/40 p-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="font-medium">
+                      class: {d.class_name}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {d.status === 'FAIL' && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] text-destructive hover:text-destructive"
+                          disabled={dismissMutation.isPending}
+                          onClick={() => dismissMutation.mutate({ inspectionId: d.inspection_id })}
+                          title="Dismiss this detection as incorrect"
                         >
-                          {d.status}
-                        </Badge>
-                      </div>
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Dismiss
+                        </Button>
+                      )}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-[10px]',
+                          d.status === 'FAIL'
+                            ? 'border-destructive/30 text-destructive'
+                            : d.status === 'PASS'
+                            ? 'border-success/30 text-success'
+                            : ''
+                        )}
+                      >
+                        {d.status}
+                      </Badge>
                     </div>
-                    {d.model_version && (
-                      <p>model: {d.model_version}</p>
-                    )}
-                    <p>confidence: {(d.confidence * 100).toFixed(2)}%</p>
-                    <p>
-                      bbox: x={Number(bbox.x || 0).toFixed(4)} y={Number(bbox.y || 0).toFixed(4)} w={Number(bbox.width || 0).toFixed(4)} h={Number(bbox.height || 0).toFixed(4)}
-                    </p>
-                    {d.notes && <p>notes: {d.notes}</p>}
                   </div>
-                );
-              })}
+                  {d.model_version && (
+                    <p>model: {d.model_version}</p>
+                  )}
+                  <p>confidence: {(d.confidence * 100).toFixed(2)}%</p>
+                  {d.notes && <p>notes: {d.notes}</p>}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -488,7 +482,6 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
           <div className="touch-scroll max-h-64 space-y-2 overflow-y-auto">
             {results.map((result) => {
               const Icon = defectIcons[result.fault_type as keyof typeof defectIcons] || AlertTriangle;
-              const bbox = result.bbox || {};
 
               return (
                 <div key={result.id} className="flex flex-col gap-3 rounded-lg border bg-card p-3 text-sm sm:flex-row sm:items-start">
@@ -521,10 +514,6 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">Image: {result.storage_path || 'Unknown'}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Location: [{Number(bbox.x || 0).toFixed(3)}, {Number(bbox.y || 0).toFixed(3)}] Size:{' '}
-                      {Number(bbox.width || 0).toFixed(3)} x {Number(bbox.height || 0).toFixed(3)}
-                    </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Detected at: {new Date(result.detected_at).toLocaleString()}
                     </p>
