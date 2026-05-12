@@ -531,7 +531,7 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
 
         {renderRawDebugSection()}
 
-        <p className="text-xs text-center text-muted-foreground">Analyzed by YOLOv8 - Solar Panel Defect Detection Model</p>
+        <p className="text-xs text-center text-muted-foreground">Analyzed by YOLOv8 - Solar Panel Classification Model</p>
       </CardContent>
     </Card>
   );
