@@ -128,12 +128,6 @@ export default function Profile() {
                     <Badge variant="outline" className="w-fit capitalize">
                       {formattedRole}
                     </Badge>
-                    <Badge
-                      variant="outline"
-                      className="max-w-full whitespace-normal break-all text-left text-muted-foreground"
-                    >
-                      {user.email}
-                    </Badge>
                   </div>
                 </div>
               </div>
@@ -279,16 +273,6 @@ export default function Profile() {
                   ) : null}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border border-border/60 bg-background/30 p-4">
-                    <p className="text-sm font-medium text-muted-foreground">Signed in as</p>
-                    <p className="mt-2 break-all text-sm sm:text-base">{user.email}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-background/30 p-4">
-                    <p className="text-sm font-medium text-muted-foreground">Account role</p>
-                    <p className="mt-2 text-sm capitalize sm:text-base">{formattedRole}</p>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>

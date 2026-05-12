@@ -438,7 +438,7 @@ export default function Panels() {
                           <PanelStatusBadge status={selectedPanel.status} className="w-fit" />
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <DetailField
                             label="Panel ID"
                             value={selectedPanel.id}
@@ -450,14 +450,12 @@ export default function Panels() {
                               <PanelStatusBadge status={selectedPanel.status} className="w-fit" />
                             }
                           />
-                          <DetailField label="Panel Label" value={selectedPanel.label || 'Not available'} />
                           <DetailField label="Serial Number" value={selectedPanel.serial_number || 'Not available'} />
                           <DetailField
                             label="Site ID"
                             value={selectedPanel.site_id}
                             valueClassName="font-mono text-[13px] break-all"
                           />
-                          <DetailField label="Site Name" value={selectedPanel.site_name || 'Unknown Site'} />
                         </div>
                       </section>
                     </div>
