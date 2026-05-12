@@ -219,7 +219,6 @@ const DefectAnalysis: FC<DefectAnalysisProps> = ({ missionId, imageCount, missio
 
   const renderRawDebugSection = () => (
     <div className="space-y-3 border-t pt-4">
-      <h4 className="text-sm font-medium">Raw CV Results (Debug)</h4>
       {rawLoading && (
         <div className="space-y-2">
           <Skeleton className="h-14 w-full" />
