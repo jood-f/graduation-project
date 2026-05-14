@@ -2,12 +2,14 @@ import { type DragEvent, type KeyboardEvent, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Upload, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Upload, Loader2, Image as ImageIcon, X } from 'lucide-react';
 import { useUploadMissionImage } from '@/hooks/useMissions';
 import { toast } from 'sonner';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+const getFileKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`;
 
 interface MissionImageUploadProps {
   missionId: string;
@@ -29,7 +31,7 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
     const seen = new Set<string>();
 
     incoming.forEach((file) => {
-      const dedupeKey = `${file.name}:${file.size}:${file.lastModified}`;
+      const dedupeKey = getFileKey(file);
       if (seen.has(dedupeKey)) return;
       seen.add(dedupeKey);
 
@@ -46,10 +48,21 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
       valid.push(file);
     });
 
-    setSelectedFiles(valid);
+    setSelectedFiles((currentFiles) => {
+      const existingKeys = new Set(currentFiles.map(getFileKey));
+      const filesToAdd = valid.filter((file) => !existingKeys.has(getFileKey(file)));
+      return [...currentFiles, ...filesToAdd];
+    });
     if (rejected.length > 0) {
       toast.error(`Skipped ${rejected.length} invalid file(s). Use JPG, PNG, WEBP up to 10MB.`);
     }
+  };
+
+  const handleRemoveSelectedFile = (fileToRemove: File) => {
+    const removeKey = getFileKey(fileToRemove);
+    setSelectedFiles((currentFiles) =>
+      currentFiles.filter((file) => getFileKey(file) !== removeKey)
+    );
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,10 +200,19 @@ export function MissionImageUpload({ missionId, missionLabel, open, onOpenChange
             <div className="space-y-2">
               <p className="text-sm font-medium">Selected files:</p>
               <div className="grid gap-2 sm:grid-cols-2">
-                {selectedFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-2 rounded-lg bg-muted p-2 text-sm">
-                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                    <span className="truncate">{file.name}</span>
+                {selectedFiles.map((file) => (
+                  <div key={getFileKey(file)} className="flex min-w-0 items-center gap-2 rounded-lg bg-muted p-2 text-sm">
+                    <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded p-1 text-muted-foreground transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => handleRemoveSelectedFile(file)}
+                      disabled={uploadMutation.isPending || isAnalyzing}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>
