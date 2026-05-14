@@ -56,18 +56,46 @@ If no classification model is found, it falls back to the older detector weights
 
 ## CV Model Testing
 
-The trained CV model was evaluated using the held-out test split and timed during inference. The final recorded model results were:
+The current CV model is the YOLOv8 classification model trained with `yolov8n-cls.pt`.
+It was evaluated using the held-out test split from the classification dataset.
+Because the current model performs image-level classification, the final evaluation uses
+classification metrics instead of detector metrics such as mAP50.
 
 | Metric | Result |
 | --- | ---: |
-| Accuracy | 0.9660 |
-| Precision | 0.9660 |
-| Recall | 0.9660 |
-| F1-score | 0.9659 |
-| mAP50 | 0.9838 |
-| Inference time | 7.9 ms |
+| Test accuracy | 0.84 |
+| Macro precision | 0.86 |
+| Macro recall | 0.85 |
+| Macro F1-score | 0.86 |
+| Weighted F1-score | 0.84 |
+| Test samples | 96 |
 
-The metrics show that the model correctly classified most test images and maintained a high detection score at IoU 0.50. The 7.9 ms inference time indicates that the model is fast enough for near-real-time inspection workflows.
+Class-level test results:
+
+| Class | Precision | Recall | F1-score | Support |
+| --- | ---: | ---: | ---: | ---: |
+| Clean | 0.81 | 0.76 | 0.79 | 29 |
+| Dusty | 0.80 | 0.88 | 0.84 | 32 |
+| Electrical-damage | 0.82 | 0.75 | 0.78 | 12 |
+| Physical-Damage | 0.88 | 0.88 | 0.88 | 8 |
+| Snow-Covered | 1.00 | 1.00 | 1.00 | 15 |
+
+Current evaluation artifacts:
+
+- `CV/YOLO_RESULTS/run_20260423_112841/test_classification_report.txt`
+- `CV/YOLO_RESULTS/run_20260423_112841/test_confusion_matrix.csv`
+- `CV/YOLO_RESULTS/run_20260423_112841/evaluation_diagrams/test_confusion_matrix_counts.png`
+- `CV/YOLO_RESULTS/run_20260423_112841/evaluation_diagrams/test_confusion_matrix_normalized.png`
+- `CV/YOLO_RESULTS/report_graphs/new_cv_classification_confusion_matrix_counts.png`
+- `CV/YOLO_RESULTS/report_graphs/new_cv_classification_confusion_matrix_normalized.png`
+
+Historical note: the older YOLOv8 detection pipeline reported detector metrics such as
+precision, recall, mAP50, and mAP50-95, but that pipeline used full-image bounding boxes.
+Those detector results should not be reported as the final classifier performance.
+The older detector confusion-matrix graphs generated for report comparison are stored in:
+
+- `CV/YOLO_RESULTS/report_graphs/old_cv_detection_confusion_matrix_counts.png`
+- `CV/YOLO_RESULTS/report_graphs/old_cv_detection_confusion_matrix_normalized.png`
 
 If mobile phone and Nikon camera images are included in the manual testing evidence, record the individual predictions in this format:
 
