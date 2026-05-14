@@ -31,7 +31,7 @@ import {
 
 import { Loader2, Upload } from 'lucide-react';
 
-import { useCreateMission } from '@/hooks/useMissions';
+import { deleteMissionIfEmpty, useCreateMission } from '@/hooks/useMissions';
 import { usePanels } from '@/hooks/usePanels';
 import { useSites } from '@/hooks/useSites';
 
@@ -68,12 +68,29 @@ export function CreateMissionDialog({ open, onOpenChange }) {
     ? panels.filter(p => p.site_id === selectedSite)
     : [];
 
+  const cleanupEmptyMission = (id: string | null) => {
+    if (!id) return;
+
+    void deleteMissionIfEmpty(id)
+      .then((deleted) => {
+        if (deleted) {
+          queryClient.invalidateQueries({ queryKey: ['missions'] });
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to clean up empty inspection:', error);
+      });
+  };
+
   const handleClose = () => {
+    const missionIdToCleanup = missionId;
+
     form.reset();
     setSelectedSite('');
     setMissionId(null);
     setUploading(false);
     onOpenChange(false);
+    cleanupEmptyMission(missionIdToCleanup);
   };
 
   // create mission

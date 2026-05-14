@@ -2,7 +2,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 MissionStatus = Literal[
     "OPEN",
@@ -14,6 +14,8 @@ MissionStatus = Literal[
     "CANCELLED",
 ]
 
+MissionSource = Literal["MANUAL", "AUTOMATED"]
+
 
 class MissionCreate(BaseModel):
     panel_id: UUID
@@ -24,6 +26,7 @@ class MissionOut(BaseModel):
     id: UUID
     panel_id: UUID
     status: MissionStatus
+    source: Optional[MissionSource] = None
     created_at: datetime
 
     class Config:

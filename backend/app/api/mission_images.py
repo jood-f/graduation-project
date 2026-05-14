@@ -431,8 +431,25 @@ def delete_mission_image(
     except Exception:
         pass
 
-    # Delete DB record
-    db.delete(img)
-    db.commit()
+    has_other_images = (
+        db.query(MissionImage.id)
+        .filter(MissionImage.mission_id == img.mission_id, MissionImage.id != img.id)
+        .first()
+        is not None
+    )
+    panel_id = mission.panel_id
 
-    return {"detail": "Mission image deleted"}
+    # Delete DB record. If this was the final image, remove the now-empty mission too.
+    db.delete(img)
+    mission_deleted = not has_other_images
+    if mission_deleted:
+        db.delete(mission)
+
+    db.commit()
+    if panel_id is not None:
+        sync_panel_status(db, panel_id=panel_id)
+
+    return {
+        "detail": "Mission image deleted",
+        "mission_deleted": mission_deleted,
+    }

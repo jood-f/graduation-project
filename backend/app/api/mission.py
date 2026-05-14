@@ -4,12 +4,15 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.models.mission import Mission
+from app.models.mission_images import MissionImage
 from app.schemas.mission import MissionCreate, MissionOut, MissionStatus
 from app.security import AuthUser, get_current_user, require_roles
+from app.services.panel_status_service import sync_panel_status
 
 router = APIRouter(prefix="/api/v1/missions", tags=["Missions"])
 
@@ -29,7 +32,7 @@ def create_mission(
     db: Session = Depends(get_db),
     current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
 ):
-    mission = Mission(**payload.model_dump())
+    mission = Mission(**payload.model_dump(), source="MANUAL")
     db.add(mission)
     db.commit()
     db.refresh(mission)
@@ -97,3 +100,34 @@ def complete_mission(
     db.commit()
     db.refresh(mission)
     return mission
+
+
+@router.delete("/{mission_id}")
+def delete_empty_mission(
+    mission_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles(["admin", "operator"])),
+):
+    mission = db.query(Mission).filter(Mission.id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+
+    image_count = (
+        db.query(func.count(MissionImage.id))
+        .filter(MissionImage.mission_id == mission_id)
+        .scalar()
+        or 0
+    )
+    if image_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Mission has images and cannot be deleted as empty",
+        )
+
+    panel_id = mission.panel_id
+    db.delete(mission)
+    db.commit()
+    if panel_id is not None:
+        sync_panel_status(db, panel_id=panel_id)
+
+    return {"detail": "Empty mission deleted", "deleted": True}

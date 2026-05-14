@@ -24,6 +24,7 @@ import { useSites } from '@/hooks/useSites';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import {
+  canUploadMissionImages,
   useMissions,
   useUpdateMissionStatus,
   type Mission,
@@ -142,7 +143,7 @@ export default function Missions() {
                 {filteredMissions.map(mission => {
                   const StatusIcon =
                     statusIcons[mission.status as MissionStatus] || Clock;
-                  const canUploadImages = mission.status !== 'COMPLETED';
+                  const canUploadImages = canManage && canUploadMissionImages(mission);
 
                   return (
                     <div
@@ -191,6 +192,17 @@ export default function Missions() {
                           </Button>
                         )}
 
+                        {canUploadImages && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setUploadMission(mission)}
+                          >
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload
+                          </Button>
+                        )}
+
                         {mission.image_count > 0 && (
                           <Button
                             variant="outline"
@@ -224,7 +236,7 @@ export default function Missions() {
                     {filteredMissions.map(mission => {
                       const StatusIcon =
                         statusIcons[mission.status as MissionStatus] || Clock;
-                      const canUploadImages = mission.status !== 'COMPLETED';
+                      const canUploadImages = canManage && canUploadMissionImages(mission);
 
                       return (
                         <TableRow key={mission.id}>
@@ -263,8 +275,20 @@ export default function Missions() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleCompleteMission(mission)}
+                                  aria-label="Complete inspection"
                                 >
                                   <CheckCircle className="h-4 w-4" />
+                                </Button>
+                              )}
+
+                              {canUploadImages && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setUploadMission(mission)}
+                                  aria-label="Upload inspection images"
+                                >
+                                  <Upload className="h-4 w-4" />
                                 </Button>
                               )}
 
@@ -273,6 +297,7 @@ export default function Missions() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => setSelectedMission(mission)}
+                                  aria-label="View inspection"
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>

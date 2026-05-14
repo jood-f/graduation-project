@@ -336,7 +336,7 @@ def _auto_create_inspection(db: Session, panel_id: uuid.UUID) -> bool:
     if existing:
         return False
 
-    mission = Mission(panel_id=panel_id, status="OPEN")
+    mission = Mission(panel_id=panel_id, status="OPEN", source="AUTOMATED")
     db.add(mission)
     db.commit()
     logger.info("Auto-created inspection for panel %s due to ML anomalies", panel_id)

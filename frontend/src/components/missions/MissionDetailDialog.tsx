@@ -332,9 +332,16 @@ export function MissionDetailDialog({
                           onClick={(event) => {
                             event.stopPropagation();
                             if (!confirm('Delete this image?')) return;
+                            const deletingLastImage = (images?.length || 0) <= 1;
                             deleteMutation.mutate({
                               imageId: image.id,
                               missionId: mission.id,
+                            }, {
+                              onSuccess: () => {
+                                if (deletingLastImage) {
+                                  onOpenChange(false);
+                                }
+                              },
                             });
                           }}
                           disabled={deleteMutation.isPending}
