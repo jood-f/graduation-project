@@ -19,11 +19,18 @@ from sklearn.model_selection import TimeSeriesSplit
 
 warnings.filterwarnings("ignore")
 
-# Add backend to path for database access
+# This training script lives outside the FastAPI app, but it still reuses the
+# backend's database models and Supabase fallback service to avoid duplicate DB code.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-WINDOW_SIZE = 20  # Number of past timesteps to use for prediction
-EPOCHS = 50  # Training epochs
+# Each training sample is built from the previous WINDOW_SIZE telemetry readings.
+# With 20 readings, the LSTM sees enough recent behavior to learn trends without
+# making every prediction depend on too much old history.
+WINDOW_SIZE = 20
+
+# These are intentionally modest so the model can be retrained on a laptop during
+# development. Increase them only when the dataset is larger and validation improves.
+EPOCHS = 50
 BATCH_SIZE = 32
 
 scaler = StandardScaler()
@@ -41,6 +48,9 @@ def load_telemetry_from_db(panel_id=None):
     db = SessionLocal() if SessionLocal is not None else None
     try:
         try:
+            # Prefer direct SQL because it is faster and returns Python datetime
+            # objects already. If that fails, the REST fallback below keeps the
+            # training script usable in environments where Postgres is blocked.
             if db is None:
                 raise RuntimeError("Direct database session is unavailable")
             query = db.query(Telemetry).order_by(Telemetry.timestamp)
@@ -84,6 +94,8 @@ def load_telemetry_from_db(panel_id=None):
 
         data = []
         for record in rows:
+            # Supabase REST can return partial rows if columns are missing or data
+            # was inserted by an older client, so skip anything the model cannot use.
             voltage = record.get("voltage")
             current = record.get("current")
             temperature = record.get("temperature")
@@ -119,6 +131,8 @@ def load_telemetry_from_db(panel_id=None):
 
 def create_sequences(df, feature_cols, target_col, window_size=20):
     """Create windowed sequences for LSTM training."""
+    # Fit the feature scaler only on the training split. Validation and test data
+    # must use this same scaler so their statistics do not leak into training.
     data = scaler.fit_transform(df[feature_cols].to_numpy())
     labels = df[target_col].to_numpy()
     
@@ -134,6 +148,8 @@ def create_sequences(df, feature_cols, target_col, window_size=20):
 
 def create_sequences_transform(df, feature_cols, target_col, window_size=20):
     """Create windowed sequences using pre-fitted scaler (for validation/test)."""
+    # Reuse the training scaler here. This mirrors production inference, where the
+    # backend loads telemetry_scaler_X.joblib and transforms live readings with it.
     data = scaler.transform(df[feature_cols].to_numpy())
     labels = df[target_col].to_numpy()
     
@@ -149,6 +165,8 @@ def create_sequences_transform(df, feature_cols, target_col, window_size=20):
 
 def build_model(input_shape, output_units=1):
     """Build LSTM model for time series prediction."""
+    # Two LSTM layers let the network learn short-term sensor movement first, then
+    # compress that history into a prediction for the next voltage/current/temp/power.
     model = models.Sequential([
         layers.LSTM(64, return_sequences=True, input_shape=input_shape),
         layers.Dropout(0.2),
@@ -159,12 +177,15 @@ def build_model(input_shape, output_units=1):
     ])
     return model
 
-# cross-validation using TimeSeriesSplit
+
 def cross_validate_model(df, feature_cols, target_col, window_size):
+    """Run chronological cross-validation so future readings never train the past."""
     print("\n" + "="*60)
     print("TIME SERIES CROSS VALIDATION")
     print("="*60)
 
+    # TimeSeriesSplit keeps the order of telemetry intact. A random split would look
+    # better on paper, but it would let tomorrow's behavior influence yesterday's model.
     tscv = TimeSeriesSplit(n_splits=5)
     scores = []
     fold = 1
@@ -180,6 +201,8 @@ def cross_validate_model(df, feature_cols, target_col, window_size):
         test_scaled = scaler_fold.transform(df_test[feature_cols].to_numpy())
 
         def make_seq(data, labels):
+            # Build the same rolling windows used by the final model, but with a
+            # fold-specific scaler so each validation fold stays honest.
             X, y = [], []
             for i in range(len(data) - window_size):
                 X.append(data[i:i+window_size])
@@ -257,11 +280,13 @@ def main():
     print(f"\nData statistics:")
     print(df[feature_cols + [target_col]].describe())
 
-    # Perform Cross Validation
+    # Cross-validation gives a quick sanity check before training the final model.
+    # It is especially useful when sensor data is noisy or comes from one panel only.
     cross_validate_model(df, feature_cols, target_col, WINDOW_SIZE)
 
     if args.save_scalers_only:
-        # Fit and save feature + target scalers 
+        # Sometimes the backend only needs refreshed scalers for inference. This path
+        # updates scaler artifacts without replacing the existing trained model.
         scaler.fit(df[feature_cols].to_numpy())
         scaler_y = StandardScaler()
         scaler_y.fit(df[target_col].to_numpy().reshape(-1, 1))
@@ -287,14 +312,16 @@ def main():
     
     print(f"\nTrain: {len(df_train)} | Val: {len(df_val)} | Test: {len(df_test)}")
     
-    # Create sequences
+    # Create model-ready windows after splitting by time. This keeps the final test
+    # period as unseen future data instead of mixing it into earlier windows.
     X_train, y_train = create_sequences(df_train, feature_cols, target_col, WINDOW_SIZE)
     X_val, y_val = create_sequences_transform(df_val, feature_cols, target_col, WINDOW_SIZE)
     X_test, y_test = create_sequences_transform(df_test, feature_cols, target_col, WINDOW_SIZE)
     
     print(f"\nSequence shapes: X_train={X_train.shape}, y_train={y_train.shape}")
     
-    # Fit target scaler on training labels and save both scalers for production
+    # Save both scalers beside the model because the backend inference service needs
+    # the exact same transformations that were used during training.
     scaler_y = StandardScaler()
     scaler_y.fit(y_train.reshape(-1, 1))
     scalers_dir = Path(__file__).parent
@@ -349,7 +376,8 @@ def main():
     model.save(model_path)
     print(f"\nModel saved to: {model_path}")
     
-    # Plot results
+    # Save a visual check for the report: the loss curve shows training behavior,
+    # and the prediction plot shows whether the model follows the test trend.
     plt.figure(figsize=(15, 5))
     
     # Plot 1: Training history
@@ -377,7 +405,8 @@ def main():
     print(f"Plot saved to: telemetry_{target_col}_results.png")
     plt.show()
     
-    # Example prediction
+    # One concrete final prediction makes the trained model easy to sanity-check
+    # without opening the plot or reading the full metric table.
     print(f"\n{'='*60}")
     print("EXAMPLE PREDICTION")
     print("="*60)
