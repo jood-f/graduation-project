@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 const API_PATH_PREFIX = '/api/v1';
-const DEPLOYED_API_BASE_URL = 'https://solarsense-backend.prouddune-0da5686d.centralindia.azurecontainerapps.io/api/v1';
+const DEPLOYED_API_BASE_URL = 'https://solarsense-backend.salmonforest-610dfccd.centralindia.azurecontainerapps.io/api/v1';
 const DEFAULT_API_TIMEOUT_MS = 30000;
 const DISABLED_TIMEOUT_VALUES = new Set([
   '0',

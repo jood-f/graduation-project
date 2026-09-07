@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import quote
 from dotenv import load_dotenv
 
 # Load .env from the backend directory
@@ -7,6 +8,18 @@ env_path = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(env_path)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+    scheme, separator, remainder = DATABASE_URL.partition("://")
+    user_info, at_separator, host_and_path = remainder.rpartition("@")
+    if at_separator and user_info.count("@"):
+        user, password = user_info.split(":", 1)
+        host, path_separator, path = host_and_path.partition("/")
+        DATABASE_URL = (
+            f"{scheme}{separator}{user}:{quote(password, safe='%')}@{host}"
+            f"{path_separator}{path}"
+        )
 
 
 def _split_origins(raw: str) -> list[str]:

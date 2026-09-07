@@ -1,14 +1,17 @@
-from sqlalchemy import create_engine
-import os
-from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
 
-load_dotenv()
+from app.core.config import DATABASE_URL
 
-db_url = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not configured")
 
-print("DB URL Loaded:", db_url[:30], "...")
-
-engine = create_engine(db_url)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 5},
+)
 
 with engine.connect() as conn:
-    print("✅ Connected to Supabase successfully!")
+    conn.execute(text("SELECT 1"))
+
+print("Connected to the database successfully!")

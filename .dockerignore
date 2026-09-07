@@ -1,5 +1,13 @@
 .git
 .azure/
+.azure-ext/
+.tmp/
+.pytest_cache/
+tests/
+runs/
+*.pdf
+**/.env
+**/.env.*
 .github
 .vscode
 .idea
@@ -33,8 +41,8 @@ CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/weights/*
 !CV/YOLO_RESULTS/run_20260210_194054/runs/detect_train/weights/best.pt
 
 # Ignore ML training artifacts that are not needed by the backend image.
-ml/*
-!ml/telemetry_power_model.h5
-!ml/telemetry_scaler_X.joblib
-!ml/telemetry_scaler_y.joblib
+ML/*
+!ML/telemetry_power_model.h5
+!ML/telemetry_scaler_X.joblib
+!ML/telemetry_scaler_y.joblib
 

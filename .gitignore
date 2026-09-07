@@ -2,6 +2,11 @@
 .env
 frontend/.env
 
+# Local cloud sessions and temporary deployment configuration
+.azure/
+.azure-ext/
+.tmp/
+
 # Node
 node_modules/
 dist/

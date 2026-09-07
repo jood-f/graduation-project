@@ -18,7 +18,11 @@ if not DATABASE_URL:
     logger.warning(database_unavailable_reason)
 else:
     try:
-        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 5},
+        )
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     except Exception as exc:
         database_unavailable_reason = f"Database initialization failed: {exc}"
